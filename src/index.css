@@ -1,0 +1,54 @@
+/* Wireframe colour tokens */
+:root {
+  --bg: #e7e5df;
+  --bg-panel: #fafaf8;
+  --bg-titlebar: #eceae5;
+  --bg-tabbar: #f3f2ee;
+  --bg-tab-inactive: #e9e8e3;
+  --bg-editor: #f7f6f2;
+  --bg-terminal: #2a2a28;
+  --border: #2a2a28;
+  --border-dash: #cfcec9;
+  --border-dash-light: #b8b7b3;
+  --accent: #3b6ea5;
+  --accent-bg: #f1f5fa;
+  --text: #2a2a28;
+  --text-muted: #6b6a65;
+  --text-faint: #a3a29d;
+  --text-terminal: #d9d8d3;
+  --text-terminal-green: #7fb37f;
+  --text-terminal-blue: #bcd0e6;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 11px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Kalam', cursive;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection inside chat messages and inputs */
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}

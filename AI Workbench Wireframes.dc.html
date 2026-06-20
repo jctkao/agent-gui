@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Kalam',cursive; }
+  @keyframes blink{ 0%,49%{opacity:1} 50%,100%{opacity:0} }
+</style>
+</helmet>
+
+<div style="width:max-content; min-width:100%; min-height:100vh; box-sizing:border-box; padding:48px; background:#e7e5df; font-family:'Kalam',cursive;">
+
+  <div style="margin:0 0 28px 4px;">
+    <div style="font-size:30px; font-weight:700; color:#2a2a28; letter-spacing:.5px;">AI 工作台 — 佈局草圖探索</div>
+    <div style="font-size:17px; color:#6b6a65; margin-top:2px;">兩種右側佈局方向 · 低保真 wireframe · 桌面視窗</div>
+  </div>
+
+  <div style="display:flex; gap:56px; align-items:flex-start;">
+
+    <!-- ================= FRAME A : TABBED ================= -->
+    <div style="flex:none; width:1180px;">
+      <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:12px;">
+        <span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border:2px solid #2a2a28; border-radius:50%; font-size:15px; font-weight:700; color:#2a2a28;">A</span>
+        <span style="font-size:22px; font-weight:700; color:#2a2a28;">分頁式工作台</span>
+        <span style="font-size:15px; color:#6b6a65;">右側單一大區，瀏覽器式分頁，一次專注一個</span>
+      </div>
+
+      <div style="position:relative; background:#fff; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.10);">
+        <!-- window -->
+        <div style="border:2.5px solid #2a2a28; border-radius:11px; overflow:hidden; height:780px; display:flex; flex-direction:column; background:#fdfdfc;">
+          <!-- titlebar -->
+          <div style="height:40px; flex:none; background:#eceae5; border-bottom:2.5px solid #2a2a28; display:flex; align-items:center; padding:0 14px; gap:8px;">
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="margin-left:14px; font-size:15px; font-weight:700; color:#4a4945;">AI Workbench</span>
+          </div>
+          <!-- body -->
+          <div style="flex:1; display:flex; min-height:0;">
+            <!-- CHAT LEFT -->
+            <div style="width:360px; flex:none; border-right:2.5px dashed #b8b7b3; display:flex; flex-direction:column; background:#fafaf8;">
+              <div style="height:42px; flex:none; display:flex; align-items:center; gap:8px; padding:0 16px; border-bottom:2px dashed #cfcec9;">
+                <span style="font-size:18px; color:#3b6ea5;">✦</span>
+                <span style="font-size:17px; font-weight:700; color:#2a2a28;">AI 助理</span>
+              </div>
+              <div style="flex:1; padding:18px 16px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+                <!-- user msg -->
+                <div style="align-self:flex-end; max-width:78%; background:#eceae5; border:2px solid #cfcec9; border-radius:12px 12px 3px 12px; padding:10px 12px; display:flex; flex-direction:column; gap:6px;">
+                  <div style="height:7px;border-radius:4px;background:#b8b7b3;width:150px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#b8b7b3;width:110px;"></div>
+                </div>
+                <!-- ai msg -->
+                <div style="align-self:flex-start; max-width:88%; display:flex; flex-direction:column; gap:7px;">
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:230px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:200px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:215px;"></div>
+                  <!-- agent action chip -->
+                  <div style="margin-top:6px; align-self:flex-start; display:inline-flex; align-items:center; gap:7px; border:2px dashed #3b6ea5; border-radius:9px; padding:6px 10px; background:#f1f5fa;">
+                    <span style="color:#3b6ea5; font-weight:700; font-size:14px;">↗</span>
+                    <span style="color:#3b6ea5; font-size:14px; font-weight:700;">已開啟 main.py 於新分頁</span>
+                  </div>
+                </div>
+                <div style="align-self:flex-start; max-width:88%; display:flex; flex-direction:column; gap:7px;">
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:180px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:120px;"></div>
+                </div>
+              </div>
+              <!-- input -->
+              <div style="flex:none; padding:14px 16px; border-top:2px dashed #cfcec9; display:flex; gap:8px; align-items:center;">
+                <div style="flex:1; height:42px; border:2px solid #cfcec9; border-radius:10px; display:flex; align-items:center; padding:0 12px; color:#a3a29d; font-size:15px;">輸入訊息給 AI…</div>
+                <div style="width:42px; height:42px; flex:none; border:2px solid #3b6ea5; background:#3b6ea5; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:18px;">↑</div>
+              </div>
+            </div>
+
+            <!-- WORKSPACE RIGHT (tabbed) -->
+            <div style="flex:1; display:flex; flex-direction:column; min-width:0; background:#fff;">
+              <!-- tab strip -->
+              <div style="height:44px; flex:none; border-bottom:2.5px solid #2a2a28; display:flex; align-items:flex-end; padding:0 10px; gap:5px; background:#f3f2ee;">
+                <div style="display:flex; align-items:center; gap:7px; padding:7px 13px; border:2px solid #2a2a28; border-bottom:none; border-radius:9px 9px 0 0; background:#fff; margin-bottom:-2.5px; font-size:14px; font-weight:700; color:#2a2a28;">
+                  <span style="font-family:'Space Mono',monospace; font-size:13px;">{ }</span> main.py <span style="color:#a3a29d; margin-left:2px;">✕</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:7px; padding:7px 13px; border:2px dashed #c2c1bc; border-bottom:none; border-radius:9px 9px 0 0; background:#e9e8e3; font-size:14px; color:#6b6a65;">
+                  <span style="font-family:'Space Mono',monospace; font-size:13px;">◯</span> React Docs
+                </div>
+                <div style="display:flex; align-items:center; gap:7px; padding:7px 13px; border:2px dashed #c2c1bc; border-bottom:none; border-radius:9px 9px 0 0; background:#e9e8e3; font-size:14px; color:#6b6a65;">
+                  <span style="font-family:'Space Mono',monospace; font-size:13px;">▦</span> Files
+                </div>
+                <div style="display:flex; align-items:center; gap:7px; padding:7px 13px; border:2px dashed #c2c1bc; border-bottom:none; border-radius:9px 9px 0 0; background:#e9e8e3; font-size:14px; color:#6b6a65;">
+                  <span style="font-family:'Space Mono',monospace; font-size:13px;">›_</span> Terminal
+                </div>
+                <div style="width:28px; height:28px; display:flex; align-items:center; justify-content:center; border:2px dashed #c2c1bc; border-radius:7px; color:#6b6a65; font-size:16px; margin-bottom:5px;">+</div>
+                <!-- mode toggle -->
+                <div style="margin-left:auto; margin-bottom:6px; display:flex; border:2px solid #2a2a28; border-radius:8px; overflow:hidden; font-size:13px; font-weight:700;">
+                  <div style="padding:5px 12px; background:#2a2a28; color:#fff;">分頁</div>
+                  <div style="padding:5px 12px; background:#fff; color:#6b6a65;">分割</div>
+                </div>
+              </div>
+              <!-- address / path bar -->
+              <div style="height:38px; flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:2px dashed #cfcec9; background:#faf9f6;">
+                <span style="font-family:'Space Mono',monospace; font-size:13px; color:#6b6a65;">{ }</span>
+                <div style="flex:1; height:26px; border:2px solid #cfcec9; border-radius:13px; display:flex; align-items:center; padding:0 12px; font-family:'Space Mono',monospace; font-size:12px; color:#8a8983;">~/project/src/main.py</div>
+              </div>
+              <!-- editor content -->
+              <div style="flex:1; display:flex; min-height:0;">
+                <!-- gutter -->
+                <div style="width:44px; flex:none; background:#f7f6f2; border-right:2px dashed #d9d8d3; padding:16px 0; display:flex; flex-direction:column; align-items:center; gap:9px; font-family:'Space Mono',monospace; font-size:12px; color:#b8b7b3;">
+                  <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                </div>
+                <!-- code -->
+                <div style="flex:1; padding:18px 22px; display:flex; flex-direction:column; gap:9px;">
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:280px;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:200px;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:340px; margin-left:28px;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:300px; margin-left:28px;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:240px; margin-left:56px;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:180px; margin-left:28px; display:flex; align-items:center;"></div>
+                  <div style="height:8px;border-radius:4px;background:#d2d1cc;width:320px;"></div>
+                  <div style="display:flex; align-items:center; gap:0;">
+                    <div style="height:8px;border-radius:4px;background:#d2d1cc;width:150px;"></div>
+                    <div style="width:2px; height:18px; background:#3b6ea5; margin-left:4px; animation:blink 1.1s step-end infinite;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- annotations -->
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="position:absolute; top:128px; left:-30px; width:150px; text-align:right; font-size:15px; color:#3b6ea5; line-height:1.25;">窄對話欄<br>固定寬度 ~360px <span style="font-size:18px;">↘</span></div>
+          <div style="position:absolute; top:96px; right:-44px; width:160px; font-size:15px; color:#3b6ea5; line-height:1.25;"><span style="font-size:18px;">↙</span> 一次顯示一個<br>分頁，畫面最大化</div>
+          <div style="position:absolute; bottom:18px; left:118px; width:200px; font-size:15px; color:#c0673b; line-height:1.25; text-align:center;">AI 可主動新增 / 切換分頁<br><span style="font-size:18px;">↑</span></div>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- ================= FRAME B : SPLIT ================= -->
+    <div style="flex:none; width:1180px;">
+      <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:12px;">
+        <span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border:2px solid #2a2a28; border-radius:50%; font-size:15px; font-weight:700; color:#2a2a28;">B</span>
+        <span style="font-size:22px; font-weight:700; color:#2a2a28;">分割視窗工作台</span>
+        <span style="font-size:15px; color:#6b6a65;">右側可切成多窗格，同時看網頁 + 檔案 + 終端機</span>
+      </div>
+
+      <div style="position:relative; background:#fff; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.10);">
+        <div style="border:2.5px solid #2a2a28; border-radius:11px; overflow:hidden; height:780px; display:flex; flex-direction:column; background:#fdfdfc;">
+          <!-- titlebar -->
+          <div style="height:40px; flex:none; background:#eceae5; border-bottom:2.5px solid #2a2a28; display:flex; align-items:center; padding:0 14px; gap:8px;">
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="width:12px;height:12px;border:2px solid #2a2a28;border-radius:50%;"></span>
+            <span style="margin-left:14px; font-size:15px; font-weight:700; color:#4a4945;">AI Workbench</span>
+          </div>
+          <div style="flex:1; display:flex; min-height:0;">
+            <!-- CHAT LEFT (collapsible) -->
+            <div style="width:300px; flex:none; border-right:2.5px dashed #b8b7b3; display:flex; flex-direction:column; background:#fafaf8;">
+              <div style="height:42px; flex:none; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:2px dashed #cfcec9;">
+                <span style="font-size:18px; color:#3b6ea5;">✦</span>
+                <span style="font-size:17px; font-weight:700; color:#2a2a28;">AI 助理</span>
+                <span style="margin-left:auto; font-size:16px; color:#a3a29d; border:2px solid #cfcec9; border-radius:6px; width:24px; height:24px; display:flex; align-items:center; justify-content:center;">‹</span>
+              </div>
+              <div style="flex:1; padding:16px 14px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+                <div style="align-self:flex-end; max-width:80%; background:#eceae5; border:2px solid #cfcec9; border-radius:12px 12px 3px 12px; padding:9px 11px; display:flex; flex-direction:column; gap:6px;">
+                  <div style="height:7px;border-radius:4px;background:#b8b7b3;width:120px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#b8b7b3;width:90px;"></div>
+                </div>
+                <div style="align-self:flex-start; max-width:90%; display:flex; flex-direction:column; gap:7px;">
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:190px;"></div>
+                  <div style="height:7px;border-radius:4px;background:#d9d8d3;width:165px;"></div>
+                  <div style="margin-top:6px; display:flex; flex-direction:column; gap:6px;">
+                    <div style="align-self:flex-start; display:inline-flex; align-items:center; gap:6px; border:2px dashed #3b6ea5; border-radius:8px; padding:5px 9px; background:#f1f5fa;">
+                      <span style="color:#3b6ea5; font-weight:700; font-size:13px;">›_</span>
+                      <span style="color:#3b6ea5; font-size:13px; font-weight:700;">執行 npm run dev</span>
+                    </div>
+                    <div style="align-self:flex-start; display:inline-flex; align-items:center; gap:6px; border:2px dashed #3b6ea5; border-radius:8px; padding:5px 9px; background:#f1f5fa;">
+                      <span style="color:#3b6ea5; font-weight:700; font-size:13px;">◯</span>
+                      <span style="color:#3b6ea5; font-size:13px; font-weight:700;">開啟 localhost 預覽</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="flex:none; padding:12px 14px; border-top:2px dashed #cfcec9; display:flex; gap:8px; align-items:center;">
+                <div style="flex:1; height:40px; border:2px solid #cfcec9; border-radius:10px; display:flex; align-items:center; padding:0 11px; color:#a3a29d; font-size:14px;">輸入訊息…</div>
+                <div style="width:40px; height:40px; flex:none; border:2px solid #3b6ea5; background:#3b6ea5; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:17px;">↑</div>
+              </div>
+            </div>
+
+            <!-- WORKSPACE RIGHT (split) -->
+            <div style="flex:1; display:flex; flex-direction:column; min-width:0; background:#fff;">
+              <!-- top bar with mode toggle -->
+              <div style="height:44px; flex:none; border-bottom:2.5px solid #2a2a28; display:flex; align-items:center; padding:0 12px; gap:8px; background:#f3f2ee;">
+                <span style="font-size:14px; font-weight:700; color:#6b6a65;">3 個窗格</span>
+                <div style="margin-left:auto; display:flex; border:2px solid #2a2a28; border-radius:8px; overflow:hidden; font-size:13px; font-weight:700;">
+                  <div style="padding:5px 12px; background:#fff; color:#6b6a65;">分頁</div>
+                  <div style="padding:5px 12px; background:#2a2a28; color:#fff;">分割</div>
+                </div>
+              </div>
+              <!-- split area -->
+              <div style="flex:1; display:flex; min-height:0;">
+                <!-- LEFT PANE: web -->
+                <div style="flex:1.25; display:flex; flex-direction:column; min-width:0; border-right:2.5px dashed #2a2a28; position:relative;">
+                  <div style="height:38px; flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:2px dashed #cfcec9; background:#faf9f6;">
+                    <span style="font-family:'Space Mono',monospace; font-size:13px; color:#6b6a65;">◯</span>
+                    <div style="flex:1; height:26px; border:2px solid #cfcec9; border-radius:13px; display:flex; align-items:center; padding:0 12px; font-family:'Space Mono',monospace; font-size:12px; color:#8a8983;">https://react.dev</div>
+                  </div>
+                  <div style="flex:1; padding:22px; display:flex; flex-direction:column; gap:13px;">
+                    <div style="height:14px;border-radius:5px;background:#cfcec9;width:60%;"></div>
+                    <div style="height:8px;border-radius:4px;background:#e0dfda;width:90%;"></div>
+                    <div style="height:8px;border-radius:4px;background:#e0dfda;width:80%;"></div>
+                    <div style="height:130px; border:2px dashed #cfcec9; border-radius:8px; margin:8px 0; display:flex; align-items:center; justify-content:center; font-family:'Space Mono',monospace; font-size:12px; color:#a3a29d; background:repeating-linear-gradient(45deg,#f7f6f2,#f7f6f2 8px,#f1f0eb 8px,#f1f0eb 16px);">頁面內容</div>
+                    <div style="height:8px;border-radius:4px;background:#e0dfda;width:85%;"></div>
+                    <div style="height:8px;border-radius:4px;background:#e0dfda;width:70%;"></div>
+                  </div>
+                  <!-- grab dots on divider -->
+                  <div style="position:absolute; top:50%; right:-7px; transform:translateY(-50%); display:flex; flex-direction:column; gap:4px; z-index:2;">
+                    <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                    <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                    <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                  </div>
+                </div>
+                <!-- RIGHT COLUMN: files top + terminal bottom -->
+                <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+                  <!-- files pane -->
+                  <div style="flex:1; display:flex; flex-direction:column; border-bottom:2.5px dashed #2a2a28; min-height:0; position:relative;">
+                    <div style="height:34px; flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:2px dashed #cfcec9; background:#faf9f6; font-size:14px; font-weight:700; color:#4a4945;">
+                      <span style="font-family:'Space Mono',monospace; font-size:13px;">▦</span> 專案檔案
+                    </div>
+                    <div style="flex:1; padding:12px 14px; display:flex; flex-direction:column; gap:9px; font-size:14px; color:#4a4945; overflow:hidden;">
+                      <div style="display:flex; align-items:center; gap:8px;"><span style="color:#8a8983;">▸</span><div style="height:8px;border-radius:4px;background:#cfcec9;width:90px;"></div></div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-left:18px;"><span style="color:#8a8983;">▾</span><div style="height:8px;border-radius:4px;background:#cfcec9;width:60px;"></div></div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-left:38px;"><span style="font-family:'Space Mono',monospace; font-size:11px; color:#3b6ea5;">{ }</span><div style="height:8px;border-radius:4px;background:#bcd0e6;width:80px;"></div></div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-left:38px;"><span style="font-family:'Space Mono',monospace; font-size:11px; color:#8a8983;">{ }</span><div style="height:8px;border-radius:4px;background:#cfcec9;width:100px;"></div></div>
+                      <div style="display:flex; align-items:center; gap:8px; margin-left:18px;"><span style="color:#8a8983;">▸</span><div style="height:8px;border-radius:4px;background:#cfcec9;width:70px;"></div></div>
+                      <div style="display:flex; align-items:center; gap:8px;"><span style="color:#8a8983;">▸</span><div style="height:8px;border-radius:4px;background:#cfcec9;width:50px;"></div></div>
+                    </div>
+                    <!-- horizontal grab dots -->
+                    <div style="position:absolute; left:50%; bottom:-7px; transform:translateX(-50%); display:flex; gap:4px; z-index:2;">
+                      <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                      <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                      <span style="width:9px;height:9px;background:#fff;border:2px solid #2a2a28;border-radius:50%;"></span>
+                    </div>
+                  </div>
+                  <!-- terminal pane -->
+                  <div style="flex:1; display:flex; flex-direction:column; min-height:0; background:#2a2a28;">
+                    <div style="height:34px; flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:2px solid #45443f; font-size:14px; font-weight:700; color:#d9d8d3;">
+                      <span style="font-family:'Space Mono',monospace; font-size:13px;">›_</span> zsh
+                    </div>
+                    <div style="flex:1; padding:12px 14px; display:flex; flex-direction:column; gap:8px; font-family:'Space Mono',monospace; font-size:12px;">
+                      <div style="color:#7fb37f;">$ npm run dev</div>
+                      <div style="height:7px;border-radius:4px;background:#54534e;width:70%;"></div>
+                      <div style="height:7px;border-radius:4px;background:#54534e;width:55%;"></div>
+                      <div style="color:#bcd0e6;">➜ localhost:3000</div>
+                      <div style="display:flex; align-items:center; gap:4px;">
+                        <span style="color:#7fb37f;">$</span>
+                        <span style="width:8px; height:14px; background:#d9d8d3; animation:blink 1.1s step-end infinite;"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- annotations -->
+        <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="position:absolute; top:70px; left:-34px; width:150px; text-align:right; font-size:15px; color:#3b6ea5; line-height:1.25;">對話欄可收合<br>讓出空間 <span style="font-size:18px;">↘</span></div>
+          <div style="position:absolute; top:150px; right:-50px; width:170px; font-size:15px; color:#3b6ea5; line-height:1.25;"><span style="font-size:18px;">↙</span> 拖曳分隔線<br>自由調整窗格大小</div>
+          <div style="position:absolute; bottom:16px; left:330px; width:240px; font-size:15px; color:#c0673b; line-height:1.25; text-align:center;">AI 可同時操作多個窗格<br>（跑指令 + 開預覽）<span style="font-size:18px;">↑</span></div>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 2500, &quot;height&quot;: 1000 },
+  &quot;showNotes&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot; }
+}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showNotes: this.props.showNotes ?? true,
+    };
+  }
+}
+</script>
+</body>
+</html>

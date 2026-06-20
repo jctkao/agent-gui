@@ -1,0 +1,17 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for AI Workbench",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "sql:allow-load",
+    "fs:default",
+    "mcp-bridge:default"
+  ]
+}
