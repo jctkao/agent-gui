@@ -3,7 +3,8 @@
     "allow": [
       "Bash(openspec status *)",
       "Bash(openspec instructions *)",
-      "PowerShell(openspec status *)"
+      "PowerShell(openspec status *)",
+      "Bash(npx openspec *)"
     ]
   }
 }
