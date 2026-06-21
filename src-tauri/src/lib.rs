@@ -1,11 +1,12 @@
 mod commands;
 
 use commands::browser::{
-    browser_hide, browser_open, browser_set_rect, browser_show, BrowserOverlayState,
+    browser_back, browser_forward, browser_hide, browser_open, browser_reload,
+    browser_set_rect, browser_show, BrowserOverlayState,
 };
 use std::sync::Mutex;
-use tauri::{LogicalPosition, LogicalSize, Manager, WebviewUrl};
-use tauri::webview::WebviewBuilder;
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
+use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,12 +32,42 @@ pub fn run() {
             // setup-time creation is the supported multiwebview pattern. Runtime commands
             // only navigate/reposition this existing webview.
             let main_window = app.windows().remove("main").expect("main window not found");
+            let app_handle = app.handle().clone();
             main_window
                 .add_child(
                     WebviewBuilder::new(
                         "browser-overlay",
                         WebviewUrl::External("about:blank".parse().unwrap()),
-                    ),
+                    )
+                    .on_page_load(move |wv, payload| {
+                        println!("[on_page_load] event={:?} url={}", payload.event(), payload.url());
+                        if payload.event() == PageLoadEvent::Finished {
+                            let url = payload.url().to_string();
+                            if url != "about:blank" {
+                                app_handle.emit("browser-url-changed", url).ok();
+                                // Inject SPA navigation monitoring.
+                                // Uses window.__TAURI__ if available; logs availability for debugging.
+                                wv.eval(r#"
+                                    (function() {
+                                        if (window.__overlayMonitorInstalled) return;
+                                        window.__overlayMonitorInstalled = true;
+                                        console.log('[browser-overlay] __TAURI__:', typeof window.__TAURI__, 'ipc:', typeof window.ipc);
+                                        function notifyUrl() {
+                                            var url = window.location.href;
+                                            if (window.__TAURI__ && window.__TAURI__.event) {
+                                                window.__TAURI__.event.emit('browser-url-changed', url);
+                                            }
+                                        }
+                                        var _push = history.pushState.bind(history);
+                                        history.pushState = function(s, t, u) { _push(s, t, u); notifyUrl(); };
+                                        var _replace = history.replaceState.bind(history);
+                                        history.replaceState = function(s, t, u) { _replace(s, t, u); notifyUrl(); };
+                                        window.addEventListener('popstate', notifyUrl);
+                                    })();
+                                "#).ok();
+                            }
+                        }
+                    }),
                     LogicalPosition::new(-10000.0, -10000.0),
                     LogicalSize::new(1.0, 1.0),
                 )
@@ -48,6 +79,9 @@ pub fn run() {
             browser_set_rect,
             browser_show,
             browser_hide,
+            browser_back,
+            browser_forward,
+            browser_reload,
         ]);
 
     #[cfg(debug_assertions)]

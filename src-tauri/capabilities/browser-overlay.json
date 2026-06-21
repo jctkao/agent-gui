@@ -1,0 +1,11 @@
+{
+  "identifier": "browser-overlay",
+  "description": "Allow browser-overlay webview to emit navigation events to the main window",
+  "webviews": ["browser-overlay"],
+  "remote": {
+    "urls": ["https://*/*", "http://*/*"]
+  },
+  "permissions": [
+    "core:event:allow-emit"
+  ]
+}

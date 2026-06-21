@@ -86,3 +86,27 @@ pub fn browser_hide(app: AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn browser_back(app: AppHandle) -> Result<(), String> {
+    if let Some(wv) = app.get_webview("browser-overlay") {
+        wv.eval("history.back()").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn browser_forward(app: AppHandle) -> Result<(), String> {
+    if let Some(wv) = app.get_webview("browser-overlay") {
+        wv.eval("history.forward()").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn browser_reload(app: AppHandle) -> Result<(), String> {
+    if let Some(wv) = app.get_webview("browser-overlay") {
+        wv.eval("location.reload()").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

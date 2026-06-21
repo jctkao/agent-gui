@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 
 interface Props {
@@ -35,10 +36,18 @@ export default function BrowserPane({ url = "https://react.dev" }: Props) {
     });
     ro.observe(el);
 
+    // Sync URL bar when the overlay webview completes a full-page navigation
+    let unlisten: (() => void) | undefined;
+    listen<string>("browser-url-changed", (event) => {
+      setCurrentUrl(event.payload);
+      setInputUrl(event.payload);
+    }).then((fn) => { unlisten = fn; });
+
     return () => {
       ro.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       invoke("browser_hide").catch(console.error);
+      unlisten?.();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -57,6 +66,9 @@ export default function BrowserPane({ url = "https://react.dev" }: Props) {
     <div style={pane}>
       {/* URL bar */}
       <div style={urlBar}>
+        <button onClick={() => invoke("browser_back")} style={navBtn}>←</button>
+        <button onClick={() => invoke("browser_forward")} style={navBtn}>→</button>
+        <button onClick={() => invoke("browser_reload")} style={navBtn}>↺</button>
         <span style={mono}>◯</span>
         <input
           value={inputUrl}
@@ -96,6 +108,10 @@ const urlInput: React.CSSProperties = {
   flex: 1, height: 26, border: "2px solid var(--border-dash)", borderRadius: 13,
   padding: "0 12px", fontFamily: "'Space Mono', monospace", fontSize: 12,
   color: "#8a8983", background: "#fff",
+};
+const navBtn: React.CSSProperties = {
+  background: "none", border: "none", cursor: "pointer",
+  fontSize: 14, color: "var(--accent)", padding: "0 2px",
 };
 const goBtn: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
