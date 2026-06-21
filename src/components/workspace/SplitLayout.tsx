@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../../store/workspace";
 export default function SplitLayout() {
   const tabs = useWorkspaceStore((s) => s.tabs);
   const browserTab = tabs.find((t) => t.type === "browser");
+  const terminalTab = tabs.find((t) => t.type === "terminal");
 
   return (
     <div style={container}>
@@ -22,7 +23,9 @@ export default function SplitLayout() {
           <div style={grabDots("bottom")} />
         </div>
         <div style={bottomPane}>
-          <TerminalPane />
+          {terminalTab
+            ? <TerminalPane pane={terminalTab} isActive />
+            : <div style={{ flex: 1, background: "#2a2a28" }} />}
         </div>
       </div>
     </div>

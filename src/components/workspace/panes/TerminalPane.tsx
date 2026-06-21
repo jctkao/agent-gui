@@ -1,47 +1,119 @@
-export default function TerminalPane() {
+import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { useEffect, useRef, useState } from "react";
+import { useWorkspaceStore } from "../../../store/workspace";
+import { Pane } from "../../../store/workspace";
+import { createTerminal, destroyTerminal } from "../../../lib/terminalRegistry";
+
+interface Props {
+  pane: Pane;
+  isActive: boolean;
+}
+
+export default function TerminalPane({ pane, isActive }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ptyIdRef = useRef<string | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const closeTab = useWorkspaceStore((s) => s.closeTab);
+
+  // Mount: create terminal + PTY session
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const term = createTerminal(pane.id);
+    const fitAddon = new FitAddon();
+    fitAddonRef.current = fitAddon;
+    term.loadAddon(fitAddon);
+    term.open(container);
+    fitAddon.fit();
+
+    let unlistenData: UnlistenFn | null = null;
+    let unlistenExit: UnlistenFn | null = null;
+    let disposed = false;
+
+    invoke<string>("pty_create", { shell: pane.shell ?? "powershell" })
+      .then(async (ptyId) => {
+        if (disposed) {
+          invoke("pty_kill", { id: ptyId }).catch(() => {});
+          return;
+        }
+        ptyIdRef.current = ptyId;
+
+        // Forward PTY output to xterm
+        unlistenData = await listen<number[]>(`pty-data-${ptyId}`, (ev) => {
+          term.write(new Uint8Array(ev.payload));
+        });
+
+        // User input → PTY
+        term.onData((s) => {
+          if (!ptyIdRef.current) return;
+          const bytes = Array.from(new TextEncoder().encode(s));
+          invoke("pty_write", { id: ptyIdRef.current, data: bytes }).catch(console.error);
+        });
+
+        // PTY exit
+        unlistenExit = await listen(`pty-exit-${ptyId}`, () => {
+          term.writeln("\r\n\x1b[90m[process exited]\x1b[0m");
+        });
+
+        // Resize observer
+        const ro = new ResizeObserver(() => {
+          if (!ptyIdRef.current) return;
+          fitAddon.fit();
+          const { rows, cols } = term;
+          invoke("pty_resize", { id: ptyIdRef.current, rows, cols }).catch(console.error);
+        });
+        ro.observe(container);
+
+        // Cleanup attached to dispose flag
+        return () => ro.disconnect();
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        closeTab(pane.id);
+      });
+
+    return () => {
+      disposed = true;
+      unlistenData?.();
+      unlistenExit?.();
+      if (ptyIdRef.current) {
+        invoke("pty_kill", { id: ptyIdRef.current }).catch(() => {});
+      }
+      destroyTerminal(pane.id);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-fit when this tab becomes active
+  useEffect(() => {
+    if (isActive && fitAddonRef.current) {
+      fitAddonRef.current.fit();
+    }
+  }, [isActive]);
+
   return (
-    <div style={pane}>
-      <div style={paneHeader}>
-        <span style={mono}>›_</span> zsh
-      </div>
-      <div style={body}>
-        <div style={{ color: "var(--text-terminal-green)" }}>$ npm run dev</div>
-        <div style={skeletonLine(70)} />
-        <div style={skeletonLine(55)} />
-        <div style={{ color: "var(--text-terminal-blue)" }}>➜  localhost:3000</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ color: "var(--text-terminal-green)" }}>$</span>
-          <span style={cursor} />
-        </div>
-      </div>
+    <div style={paneStyle}>
+      {error && <div style={errorBanner}>{error}</div>}
+      <div ref={containerRef} style={xtermContainer} />
     </div>
   );
 }
 
-function skeletonLine(widthPct: number): React.CSSProperties {
-  return {
-    height: 7, borderRadius: 4, background: "#54534e", width: `${widthPct}%`,
-  };
-}
-
-const pane: React.CSSProperties = {
+const paneStyle: React.CSSProperties = {
   flex: 1, display: "flex", flexDirection: "column", minHeight: 0,
-  background: "var(--bg-terminal)",
+  background: "#2a2a28",
 };
-const paneHeader: React.CSSProperties = {
-  height: 34, flexShrink: 0,
-  display: "flex", alignItems: "center", gap: 8, padding: "0 12px",
-  borderBottom: "2px solid #45443f",
-  fontSize: 14, fontWeight: 700, color: "var(--text-terminal)",
+const xtermContainer: React.CSSProperties = {
+  flex: 1, minHeight: 0, padding: "4px 2px",
 };
-const mono: React.CSSProperties = { fontFamily: "'Space Mono', monospace", fontSize: 13 };
-const body: React.CSSProperties = {
-  flex: 1, padding: "12px 14px",
-  display: "flex", flexDirection: "column", gap: 8,
-  fontFamily: "'Space Mono', monospace", fontSize: 12, color: "var(--text-terminal)",
-  overflowY: "auto",
-};
-const cursor: React.CSSProperties = {
-  width: 8, height: 14, background: "var(--text-terminal)",
-  animation: "blink 1.1s step-end infinite",
+const errorBanner: React.CSSProperties = {
+  padding: "8px 14px",
+  background: "#5c1a1a", color: "#ffaaaa",
+  fontSize: 12, fontFamily: "'Space Mono', monospace",
 };

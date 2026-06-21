@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef } from "react";
-import { useWorkspaceStore } from "../../store/workspace";
+import { Pane, PaneType, useWorkspaceStore } from "../../store/workspace";
 import TabBar from "./TabBar";
 import SplitLayout from "./SplitLayout";
 import BrowserPane from "./panes/BrowserPane";
@@ -8,11 +8,13 @@ import FilePane from "./panes/FilePane";
 import EditorPane from "./panes/EditorPane";
 import TerminalPane from "./panes/TerminalPane";
 
+let tabCounter = 100;
+function newId() { return `tab-${++tabCounter}`; }
+
 export default function WorkspacePanel() {
-  const { mode, tabs, activeTabId, setMode, setActiveTab } = useWorkspaceStore();
+  const { mode, tabs, activeTabId, setMode, setActiveTab, addTab, closeTab } = useWorkspaceStore();
   const prevActiveRef = useRef(activeTabId);
 
-  // Task 6.6: show/hide browser overlay on tab switch
   useEffect(() => {
     const prev = prevActiveRef.current;
     prevActiveRef.current = activeTabId;
@@ -21,23 +23,30 @@ export default function WorkspacePanel() {
     const prevTab = tabs.find((t) => t.id === prev);
     const nextTab = tabs.find((t) => t.id === activeTabId);
 
-    if (prevTab?.type === "browser") {
-      invoke("browser_hide").catch(console.error);
-    }
-    if (nextTab?.type === "browser") {
-      invoke("browser_show").catch(console.error);
-    }
+    if (prevTab?.type === "browser") invoke("browser_hide").catch(console.error);
+    if (nextTab?.type === "browser") invoke("browser_show").catch(console.error);
   }, [activeTabId, tabs]);
 
+  function handleAddTab(type: PaneType, shell?: "powershell" | "wsl") {
+    const id = newId();
+    const newPane: Pane =
+      type === "terminal"
+        ? { id, type, label: shell === "wsl" ? "bash (WSL)" : "PowerShell", shell }
+        : type === "browser"
+        ? { id, type, label: "網頁", url: "about:blank" }
+        : { id, type, label: type === "file" ? "檔案總管" : type };
+    addTab(newPane);
+  }
+
+  const terminalTabs = tabs.filter((t) => t.type === "terminal");
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  function renderActivePane() {
-    if (!activeTab) return null;
+  function renderNonTerminalPane() {
+    if (!activeTab || activeTab.type === "terminal") return null;
     switch (activeTab.type) {
-      case "browser":  return <BrowserPane url={activeTab.url} />;
-      case "file":     return <FilePane />;
-      case "editor":   return <EditorPane />;
-      case "terminal": return <TerminalPane />;
+      case "browser": return <BrowserPane url={activeTab.url} />;
+      case "file":    return <FilePane />;
+      case "editor":  return <EditorPane />;
     }
   }
 
@@ -51,9 +60,25 @@ export default function WorkspacePanel() {
             mode={mode}
             onSelectTab={setActiveTab}
             onSetMode={setMode}
+            onCloseTab={closeTab}
+            onAddTab={handleAddTab}
           />
           <div style={paneContainer}>
-            {renderActivePane()}
+            {/* Non-terminal: only render active */}
+            {renderNonTerminalPane()}
+
+            {/* Terminal tabs: always mounted, CSS-toggled */}
+            {terminalTabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  style={isActive ? terminalActive : terminalHidden}
+                >
+                  <TerminalPane pane={tab} isActive={isActive} />
+                </div>
+              );
+            })}
           </div>
         </>
       ) : (
@@ -78,7 +103,14 @@ const panel: React.CSSProperties = {
   flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "#fff",
 };
 const paneContainer: React.CSSProperties = {
-  flex: 1, display: "flex", flexDirection: "column", minHeight: 0,
+  flex: 1, display: "flex", flexDirection: "column", minHeight: 0, position: "relative",
+};
+const terminalActive: React.CSSProperties = {
+  position: "relative", flex: 1, display: "flex", flexDirection: "column", minHeight: 0,
+};
+const terminalHidden: React.CSSProperties = {
+  position: "absolute", inset: 0, visibility: "hidden",
+  display: "flex", flexDirection: "column",
 };
 const splitHeader: React.CSSProperties = {
   height: 44, flexShrink: 0,

@@ -1,9 +1,11 @@
 mod commands;
+mod pty;
 
 use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
     browser_set_rect, browser_show, BrowserOverlayState,
 };
+use pty::{pty_create, pty_kill, pty_resize, pty_write, PtyManager};
 use std::sync::Mutex;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
@@ -26,6 +28,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(BrowserOverlayState { last_rect: None }))
+        .manage(PtyManager::default())
         .setup(|app| {
             // Create the browser overlay webview once, at startup, off-screen.
             // Runtime add_child deadlocks on Windows WebView2 (see commands/browser.rs);
@@ -82,6 +85,10 @@ pub fn run() {
             browser_back,
             browser_forward,
             browser_reload,
+            pty_create,
+            pty_write,
+            pty_resize,
+            pty_kill,
         ]);
 
     #[cfg(debug_assertions)]

@@ -45,7 +45,32 @@ Rust: app.windows()["main"].add_child(WebviewBuilder, position, size)
 - `Webview` (child webview type) has no `set_visible()`; show/hide is done by moving bounds off-screen (`-10000, -10000`) vs restoring from `BrowserOverlayState.last_rect`
 - Icons are required to build on Windows: run `npm run tauri -- icon <source.png>` to generate `src-tauri/icons/`
 
-**Consequence**: the browser overlay is always above all React UI. When switching away from the browser tab, `browser_hide` must be called before any React modal or dropdown appears over that area. `WorkspacePanel.tsx` handles this in a `useEffect` on `activeTabId`.
+**Consequence**: the browser overlay is always above all React UI. Two places that must call `browser_hide` before rendering UI over the pane area:
+1. **Tab switching** — `WorkspacePanel.tsx` handles this in a `useEffect` on `activeTabId`
+2. **`+` dropdown opening** — `TabBar.tsx` calls `browser_hide` when `dropdownOpen` becomes true (and `browser_show` on close), because the dropdown extends into the pane area which the overlay covers
+
+### Terminal PTY Pattern
+
+Each terminal tab connects to a real shell process via `portable-pty` (Rust, wezterm). The frontend renders with xterm.js.
+
+```
+TerminalPane mount
+  → invoke("pty_create", { shell })     → Rust spawns shell, starts read thread
+  ← returns ptyId (UUID)
+  → terminal.open(divRef)              (xterm.js attach to DOM)
+  → listen("pty-data-{ptyId}")         ← Rust thread emits on each read()
+  → terminal.onData → invoke("pty_write")
+
+Tab switch away: CSS visibility: hidden (PTY keeps running)
+Tab switch back: fitAddon.fit() + pty_resize
+Tab close: React unmount → invoke("pty_kill") + destroyTerminal(ptyId)
+```
+
+Shell resolution (Windows):
+- `"powershell"` → `pwsh.exe` (checked via `where.exe`) or fallback `powershell.exe`
+- `"wsl"` → `wsl.exe -e bash`; if WSL is not installed, `pty_create` returns an error, the tab is removed and an error is shown
+
+xterm.js instances are **not** stored in Zustand (not serializable). They live in `src/lib/terminalRegistry.ts` — a module-level `Map<ptyId, Terminal>`.
 
 ### Data Flow
 
@@ -53,38 +78,49 @@ Rust: app.windows()["main"].add_child(WebviewBuilder, position, size)
 useWorkspaceStore (Zustand)
   ├── mode: 'tab' | 'split'
   ├── tabs: Pane[]          ← PaneType: browser | file | editor | terminal
+  │                            Pane has optional shell?: "powershell" | "wsl"
   └── activeTabId
 
 WorkspacePanel
-  ├── watches activeTabId changes → invokes browser_hide / browser_show
-  ├── tab mode  → TabBar + single active pane
+  ├── watches activeTabId → invokes browser_hide / browser_show
+  ├── tab mode:
+  │     non-terminal tabs → only render active pane
+  │     terminal tabs     → all mounted, CSS visibility toggled
   └── split mode → SplitLayout (fixed: browser left, file top-right, terminal bottom-right)
+
+TabBar
+  ├── × button per tab → closeTab(id)
+  ├── + button → dropdown (網頁 / 檔案總管 / PowerShell / bash WSL)
+  └── dropdown open on browser tab → browser_hide / browser_show
 ```
 
 ### Rust Backend (`src-tauri/src/`)
 
-- **`lib.rs`** — app entry: registers SQL migrations, plugins, and browser commands
-- **`commands/browser.rs`** — four Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`created: bool`, `last_rect: Option<(f64,f64,f64,f64)>`)
+- **`lib.rs`** — app entry: registers SQL migrations, plugins, manages `BrowserOverlayState` and `PtyManager`, registers all Tauri commands
+- **`commands/browser.rs`** — four Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`)
+- **`pty.rs`** — PTY session management: `PtyManager` (`Mutex<HashMap<String, PtySession>>`), commands `pty_create / pty_write / pty_resize / pty_kill`. Each session spawns a background thread that reads PTY master output and emits `pty-data-{id}` Tauri events.
 - SQLite DB (`settings.db`) is initialized on first launch via `tauri-plugin-sql` migrations; the schema is a single `settings (key, value)` key-value table
 
 ### Frontend (`src/`)
 
 - **`src/index.css`** — all design tokens as CSS custom properties (`--bg`, `--border`, `--accent`, etc.). All components use these variables; hardcoded colors are avoided.
-- **`src/lib/settings.ts`** — thin wrapper over `@tauri-apps/plugin-sql` for reading/writing the `settings` table. The DB connection is lazily initialized and cached.
-- **`src/store/workspace.ts`** — single Zustand store for all workspace state. Components read from it; only `WorkspacePanel` calls browser overlay invokes as a side effect.
+- **`src/lib/settings.ts`** — thin wrapper over `@tauri-apps/plugin-sql` for reading/writing the `settings` table.
+- **`src/lib/terminalRegistry.ts`** — module-level `Map<string, Terminal>` for xterm.js instances. Use `createTerminal(id)` / `getTerminal(id)` / `destroyTerminal(id)`. Never put Terminal objects in Zustand.
+- **`src/store/workspace.ts`** — single Zustand store for all workspace state. `Pane.shell` holds the terminal shell type; ptyId is managed locally inside `TerminalPane` via `useRef`.
 - Inline `React.CSSProperties` objects are used for styling (no CSS modules or Tailwind).
 
 ### Adding a New Pane Type
 
 1. Add the type to `PaneType` in `src/store/workspace.ts`
 2. Create `src/components/workspace/panes/<Name>Pane.tsx`
-3. Add a case in `WorkspacePanel.tsx` `renderActivePane()`
+3. Add a case in `WorkspacePanel.tsx` `renderNonTerminalPane()` (terminal panes have a separate always-mounted render path — only add here for non-terminal types)
 4. Add an icon entry in `TabBar.tsx` `PANE_ICONS`
+5. Add an option in `TabBar.tsx` `ADD_OPTIONS` if the type should appear in the `+` dropdown
 
 ### Adding a New Rust Command
 
-1. Implement in `src-tauri/src/commands/` (new file or existing module)
-2. Export from `src-tauri/src/commands/mod.rs`
+1. Implement in `src-tauri/src/commands/` (new file or existing module) or directly in `pty.rs` / `lib.rs` for small additions
+2. If in a new file under `commands/`, export from `src-tauri/src/commands/mod.rs`
 3. Import and add to `tauri::generate_handler![]` in `lib.rs`
 4. Add required permissions to `src-tauri/capabilities/default.json`
 
@@ -94,4 +130,6 @@ WorkspacePanel
 
 ## OpenSpec Changes
 
-Planning artifacts live in `openspec/changes/`. The active change is `tauri-app-scaffold` (27/28 tasks complete — pending task 6.7: verify browser overlay renders an external site correctly). Use `/opsx:apply` to resume implementation.
+Planning artifacts live in `openspec/changes/`. Completed changes are archived under `openspec/changes/archive/`. Main capability specs are in `openspec/specs/`.
+
+There are currently no active changes. Use `/opsx:propose` to start a new change.

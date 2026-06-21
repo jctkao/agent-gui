@@ -7,6 +7,7 @@ export interface Pane {
   type: PaneType;
   label: string;
   url?: string;
+  shell?: "powershell" | "wsl";
 }
 
 export type WorkspaceMode = "tab" | "split";
@@ -22,10 +23,10 @@ interface WorkspaceState {
 }
 
 const DEFAULT_TABS: Pane[] = [
-  { id: "browser-1", type: "browser", label: "Browser", url: "https://react.dev" },
-  { id: "file-1",    type: "file",    label: "Files" },
-  { id: "editor-1",  type: "editor",  label: "Editor" },
-  { id: "terminal-1",type: "terminal",label: "Terminal" },
+  { id: "browser-1",  type: "browser",  label: "Browser", url: "https://react.dev" },
+  { id: "file-1",     type: "file",     label: "Files" },
+  { id: "editor-1",   type: "editor",   label: "Editor" },
+  { id: "terminal-1", type: "terminal", label: "Terminal", shell: "powershell" },
 ];
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
