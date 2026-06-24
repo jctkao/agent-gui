@@ -1,10 +1,16 @@
-# Spec: chat-terminal-bridge
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Chat sends command to active terminal
+**Reason**: Chat panel is now connected to the Ollama agentic loop instead of routing input to a PTY. Terminal command execution is handled by the agent via tool calls with user approval.
+**Migration**: The terminal tab still exists and is fully functional. Terminal interaction is unchanged — only the chat panel input path changes.
 
-Connects the chat panel to the Ollama agentic loop for LLM-driven interactions. PTY session IDs are shared via the Zustand store so terminal pane components can interact with their own PTY; the chat panel routes user input to the Ollama agent instead of directly to a terminal.
+### Requirement: Terminal output shown in chat
+**Reason**: PTY output is no longer displayed in the chat panel. Ollama's text responses and tool execution results are shown instead via `agent-message` and `agent-tool-ran` events.
+**Migration**: None. Terminal tab continues to show PTY output as before.
 
-## Requirements
+---
+
+## MODIFIED Requirements
 
 ### Requirement: PTY ID shared via store
 Each terminal pane SHALL expose its PTY session ID through the Zustand workspace store so terminal pane components can interact with their own PTY. The chat panel SHALL NOT access PTY IDs directly.
@@ -18,6 +24,8 @@ Each terminal pane SHALL expose its PTY session ID through the Zustand workspace
 - **THEN** the pane's `ptyId` in the store SHALL be `undefined`
 
 ---
+
+## ADDED Requirements
 
 ### Requirement: Chat input routes to Ollama agent
 The chat panel SHALL invoke `agent_start(user_message)` when the user submits input, and disable the input field until `agent-done` is received.

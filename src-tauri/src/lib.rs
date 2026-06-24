@@ -1,6 +1,9 @@
+mod agent;
 mod commands;
 mod pty;
 
+use agent::commands::{agent_approve, agent_start};
+use agent::state::AgentState;
 use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
     browser_set_rect, browser_show, BrowserOverlayState,
@@ -29,6 +32,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(BrowserOverlayState { last_rect: None }))
         .manage(PtyManager::default())
+        .manage(Mutex::new(AgentState::default()))
         .setup(|app| {
             // Create the browser overlay webview once, at startup, off-screen.
             // Runtime add_child deadlocks on Windows WebView2 (see commands/browser.rs);
@@ -89,6 +93,8 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            agent_start,
+            agent_approve,
         ]);
 
     #[cfg(debug_assertions)]

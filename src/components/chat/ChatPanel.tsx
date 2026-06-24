@@ -1,117 +1,127 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import { Pane, useWorkspaceStore } from "../../store/workspace";
+import { getSetting } from "../../lib/settings";
+
+type Role = "user" | "assistant" | "tool-ran" | "approval";
 
 interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: Role;
   content: string;
-}
-
-function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\r/g, "");
-}
-
-async function waitForPtyId(tabId: string, timeout = 5000): Promise<string | null> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const pane = useWorkspaceStore.getState().tabs.find((t) => t.id === tabId);
-    if (pane?.ptyId) return pane.ptyId;
-    await new Promise((res) => setTimeout(res, 100));
-  }
-  return null;
+  command?: string; // for tool-ran and approval roles
 }
 
 let msgCounter = 0;
-function nextMsgId() { return `msg-${++msgCounter}`; }
+function nextId() { return `msg-${++msgCounter}`; }
 
 export default function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Tracks the id of the pending approval message so we can replace it
+  const pendingApprovalId = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const tabs = useWorkspaceStore((s) => s.tabs);
-  const addTab = useWorkspaceStore((s) => s.addTab);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [];
+
+    unlisteners.push(
+      listen<string>("agent-message", (ev) => {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: "assistant", content: ev.payload },
+        ]);
+      })
+    );
+
+    unlisteners.push(
+      listen<string>("agent-approval-needed", (ev) => {
+        const id = nextId();
+        pendingApprovalId.current = id;
+        setMessages((prev) => [
+          ...prev,
+          { id, role: "approval", content: "", command: ev.payload },
+        ]);
+      })
+    );
+
+    unlisteners.push(
+      listen<{ command: string; output: string }>("agent-tool-ran", (ev) => {
+        // Replace approval widget with the result
+        const approvalId = pendingApprovalId.current;
+        pendingApprovalId.current = null;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === approvalId
+              ? { ...m, role: "tool-ran" as Role, content: ev.payload.output, command: ev.payload.command }
+              : m
+          )
+        );
+      })
+    );
+
+    unlisteners.push(
+      listen("agent-done", () => {
+        // Dismiss any lingering approval widget (rejection path)
+        const approvalId = pendingApprovalId.current;
+        if (approvalId) {
+          pendingApprovalId.current = null;
+          setMessages((prev) => prev.filter((m) => m.id !== approvalId));
+        }
+        setSending(false);
+      })
+    );
+
+    return () => {
+      unlisteners.forEach((p) => p.then((fn) => fn()));
+    };
+  }, []);
+
   async function handleSend() {
-    const cmd = input.trim();
-    if (!cmd || sending) return;
+    const text = input.trim();
+    if (!text || sending) return;
     setInput("");
     setSending(true);
 
-    // 3.7: Add user message immediately
-    setMessages((prev) => [...prev, { id: nextMsgId(), role: "user", content: cmd }]);
+    setMessages((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
 
-    // 3.3: Find active terminal with a ready ptyId
-    let ptyId: string | null = null;
-    const readyTerm = tabs.find((t) => t.type === "terminal" && t.ptyId);
+    const ollamaUrl = (await getSetting("ollama_url")) ?? "http://localhost:11434";
+    const ollamaModel = (await getSetting("ollama_model")) ?? "llama3.2";
 
-    if (readyTerm) {
-      // 3.3: Active terminal exists and PTY is ready
-      ptyId = readyTerm.ptyId!;
-    } else {
-      const existingTerm = tabs.find((t) => t.type === "terminal");
-      let targetTabId: string;
-      if (existingTerm) {
-        // 3.5: Terminal tab exists but PTY not yet ready — wait
-        targetTabId = existingTerm.id;
-      } else {
-        // 3.4: No terminal tab at all — auto-create one
-        targetTabId = `chat-term-${Date.now()}`;
-        const newPane: Pane = { id: targetTabId, type: "terminal", label: "PowerShell", shell: "powershell" };
-        addTab(newPane);
-      }
-      ptyId = await waitForPtyId(targetTabId);
-    }
-
-    // 4.5: Timeout or PTY unavailable
-    if (!ptyId) {
+    await invoke("agent_start", {
+      userMessage: text,
+      ollamaUrl,
+      ollamaModel,
+    }).catch((e: unknown) => {
       setMessages((prev) => [
         ...prev,
-        { id: nextMsgId(), role: "assistant", content: "錯誤：無法連接到 Terminal（逾時），請確認 Terminal 分頁已正常開啟。" },
+        { id: nextId(), role: "assistant", content: `錯誤：${String(e)}` },
       ]);
       setSending(false);
-      return;
-    }
-
-    // 3.6: Send command to PTY
-    const bytes = Array.from(new TextEncoder().encode(cmd + "\r"));
-    await invoke("pty_write", { id: ptyId, data: bytes }).catch(console.error);
-
-    // 4.1 + 4.2: Subscribe to PTY output for 1.5s
-    const chunks: Uint8Array[] = [];
-    const unlisten = await listen<number[]>(`pty-data-${ptyId}`, (ev) => {
-      chunks.push(new Uint8Array(ev.payload));
     });
-    await new Promise((res) => setTimeout(res, 1500));
-    unlisten();
+  }
 
-    // 4.3 + 4.4: Decode, strip ANSI, strip echoed command, display
-    if (chunks.length > 0) {
-      const total = chunks.reduce((sum, c) => sum + c.length, 0);
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const c of chunks) { merged.set(c, offset); offset += c.length; }
-
-      const raw = new TextDecoder().decode(merged);
-      const clean = stripAnsi(raw);
-      const lines = clean.split("\n");
-      const firstIdx = lines.findIndex(
-        (l) => l.trim() !== "" && !l.trim().startsWith(cmd.trim())
+  async function handleApprove(approved: boolean) {
+    await invoke("agent_approve", { approved }).catch(console.error);
+    if (!approved) {
+      // Rejection: remove approval widget immediately (agent-done will re-enable input)
+      const approvalId = pendingApprovalId.current;
+      pendingApprovalId.current = null;
+      setMessages((prev) => prev.filter((m) => m.id !== approvalId));
+    } else {
+      // Approval: replace widget with "Running…" placeholder
+      const approvalId = pendingApprovalId.current;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === approvalId ? { ...m, role: "assistant" as Role, content: "執行中…" } : m
+        )
       );
-      const output = (firstIdx >= 0 ? lines.slice(firstIdx) : lines).join("\n").trim();
-
-      if (output) {
-        setMessages((prev) => [...prev, { id: nextMsgId(), role: "assistant", content: output }]);
-      }
     }
-
-    setSending(false);
   }
 
   return (
@@ -122,15 +132,47 @@ export default function ChatPanel() {
       </div>
 
       <div style={messagesStyle}>
-        {messages.map((msg) => (
-          <div key={msg.id} style={msg.role === "user" ? userBubbleWrap : assistantBubbleWrap}>
-            {msg.role === "user" ? (
-              <div style={userBubble} className="selectable">{msg.content}</div>
-            ) : (
-              <div style={assistantText} className="selectable">{msg.content}</div>
-            )}
-          </div>
-        ))}
+        {messages.map((msg) => {
+          if (msg.role === "user") {
+            return (
+              <div key={msg.id} style={userBubbleWrap}>
+                <div style={userBubble} className="selectable">{msg.content}</div>
+              </div>
+            );
+          }
+          if (msg.role === "assistant") {
+            return (
+              <div key={msg.id} style={assistantBubbleWrap}>
+                <div style={assistantText} className="selectable">{msg.content}</div>
+              </div>
+            );
+          }
+          if (msg.role === "tool-ran") {
+            return (
+              <div key={msg.id} style={assistantBubbleWrap}>
+                <div style={toolBlock}>
+                  <div style={toolCmd}>$ {msg.command}</div>
+                  {msg.content && <div style={toolOutput} className="selectable">{msg.content}</div>}
+                </div>
+              </div>
+            );
+          }
+          if (msg.role === "approval") {
+            return (
+              <div key={msg.id} style={assistantBubbleWrap}>
+                <div style={approvalBlock}>
+                  <div style={approvalLabel}>執行以下指令？</div>
+                  <div style={approvalCmd} className="selectable">{msg.command}</div>
+                  <div style={approvalButtons}>
+                    <button onClick={() => handleApprove(true)} style={btnApprove}>執行</button>
+                    <button onClick={() => handleApprove(false)} style={btnReject}>拒絕</button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })}
         <div ref={bottomRef} />
       </div>
 
@@ -139,7 +181,7 @@ export default function ChatPanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder={sending ? "執行中…" : "輸入指令傳送到 Terminal…"}
+          placeholder={sending ? "等待回應…" : "傳訊息給 AI 助理…"}
           disabled={sending}
           className="selectable"
           style={{ ...inputBox, opacity: sending ? 0.6 : 1 }}
@@ -173,6 +215,44 @@ const userBubble: React.CSSProperties = {
 };
 const assistantText: React.CSSProperties = {
   fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap",
+};
+const toolBlock: React.CSSProperties = {
+  border: "2px solid var(--border-dash)", borderRadius: 8,
+  overflow: "hidden", fontSize: 13,
+};
+const toolCmd: React.CSSProperties = {
+  background: "var(--bg-titlebar)", padding: "6px 10px",
+  fontFamily: "'Space Mono', monospace", fontWeight: 700,
+};
+const toolOutput: React.CSSProperties = {
+  padding: "8px 10px", fontFamily: "'Space Mono', monospace",
+  whiteSpace: "pre-wrap", lineHeight: 1.5,
+};
+const approvalBlock: React.CSSProperties = {
+  border: "2px solid var(--accent)", borderRadius: 8,
+  overflow: "hidden", fontSize: 13,
+};
+const approvalLabel: React.CSSProperties = {
+  background: "var(--accent)", color: "#fff",
+  padding: "6px 10px", fontWeight: 700, fontSize: 12,
+};
+const approvalCmd: React.CSSProperties = {
+  padding: "8px 10px", fontFamily: "'Space Mono', monospace",
+  whiteSpace: "pre-wrap", background: "var(--bg-panel)",
+};
+const approvalButtons: React.CSSProperties = {
+  display: "flex", gap: 8, padding: "8px 10px",
+  background: "var(--bg-panel)", borderTop: "1px solid var(--border-dash)",
+};
+const btnApprove: React.CSSProperties = {
+  background: "var(--accent)", color: "#fff",
+  border: "none", borderRadius: 6,
+  padding: "4px 14px", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
+};
+const btnReject: React.CSSProperties = {
+  background: "none", border: "2px solid var(--border-dash)",
+  borderRadius: 6, padding: "4px 14px",
+  cursor: "pointer", fontSize: 13, fontFamily: "inherit",
 };
 const inputRow: React.CSSProperties = {
   flexShrink: 0, padding: "14px 16px",

@@ -7,18 +7,22 @@ interface Props {
 
 export default function SettingsModal({ onClose }: Props) {
   const [apiKey, setApiKey] = useState("");
+  const [ollamaUrl, setOllamaUrl] = useState("");
+  const [ollamaModel, setOllamaModel] = useState("");
   const [saved, setSaved] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    getSetting("anthropic_api_key").then((v) => {
-      if (v) setApiKey(v);
-    });
+    getSetting("anthropic_api_key").then((v) => { if (v) setApiKey(v); });
+    getSetting("ollama_url").then((v) => { if (v) setOllamaUrl(v); });
+    getSetting("ollama_model").then((v) => { if (v) setOllamaModel(v); });
     inputRef.current?.focus();
   }, []);
 
   async function handleSave() {
     await setSetting("anthropic_api_key", apiKey);
+    await setSetting("ollama_url", ollamaUrl || "http://localhost:11434");
+    await setSetting("ollama_model", ollamaModel || "llama3.2");
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
@@ -41,11 +45,30 @@ export default function SettingsModal({ onClose }: Props) {
           className="selectable"
           style={input}
         />
-        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0 16px" }}>
-          儲存於本機 SQLite，不會傳送至任何伺服器。
-        </p>
+        <p style={hint}>儲存於本機 SQLite，不會傳送至任何伺服器。</p>
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <label style={label}>Ollama URL</label>
+        <input
+          type="text"
+          value={ollamaUrl}
+          onChange={(e) => setOllamaUrl(e.target.value)}
+          placeholder="http://localhost:11434"
+          className="selectable"
+          style={input}
+        />
+
+        <label style={{ ...label, marginTop: 14 }}>Ollama Model</label>
+        <input
+          type="text"
+          value={ollamaModel}
+          onChange={(e) => setOllamaModel(e.target.value)}
+          placeholder="llama3.2"
+          className="selectable"
+          style={input}
+        />
+        <p style={hint}>需支援 tool calling（例如 llama3.1、qwen2.5）。</p>
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
           <button onClick={onClose} style={btnSecondary}>取消</button>
           <button onClick={handleSave} style={btnPrimary}>
             {saved ? "已儲存 ✓" : "儲存"}
@@ -74,10 +97,14 @@ const closeBtn: React.CSSProperties = {
 const label: React.CSSProperties = {
   display: "block", fontWeight: 700, marginBottom: 6,
 };
+const hint: React.CSSProperties = {
+  fontSize: 13, color: "var(--text-muted)", margin: "6px 0 16px",
+};
 const input: React.CSSProperties = {
   width: "100%", height: 40, border: "2px solid var(--border-dash)",
   borderRadius: 8, padding: "0 12px", fontSize: 14,
   fontFamily: "'Space Mono', monospace", background: "#faf9f6",
+  boxSizing: "border-box",
 };
 const btnPrimary: React.CSSProperties = {
   background: "var(--accent)", color: "#fff",
