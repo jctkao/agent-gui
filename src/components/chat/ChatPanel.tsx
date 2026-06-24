@@ -2,25 +2,63 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { getSetting } from "../../lib/settings";
+import { getTerminal } from "../../lib/terminalRegistry";
+import { useWorkspaceStore, Pane } from "../../store/workspace";
 
-type Role = "user" | "assistant" | "tool-ran" | "approval";
+type Role = "user" | "assistant" | "tool-ran" | "terminal-waiting";
 
 interface Message {
   id: string;
   role: Role;
   content: string;
-  command?: string; // for tool-ran and approval roles
+  command?: string;
 }
 
 let msgCounter = 0;
 function nextId() { return `msg-${++msgCounter}`; }
 
+function stripAnsi(s: string): string {
+  return s
+    .replace(/\x1b\[[0-9;]*[mGKHFABCDJST]/g, "")
+    .replace(/\x1b\[\?[0-9;]*[hl]/g, "")
+    .replace(/\x1b[()][AB012]/g, "")
+    .replace(/\r/g, "");
+}
+
+function snapshotPrompt(tabId: string): string {
+  const term = getTerminal(tabId);
+  if (!term) return "";
+  const buf = term.buffer.active;
+  for (let i = buf.cursorY; i >= 0; i--) {
+    const line = buf.getLine(i);
+    if (!line) continue;
+    const text = line.translateToString(true);
+    if (text.trim()) return text.trimEnd();
+  }
+  return "";
+}
+
+const PS_PROMPT_RE = /^PS .*>\s*$/;
+
+function waitForPtyId(tabId: string, timeout = 5000): Promise<string | null> {
+  return new Promise((resolve) => {
+    const existing = useWorkspaceStore.getState().tabs.find((t) => t.id === tabId);
+    if (existing?.ptyId) { resolve(existing.ptyId); return; }
+    const timer = setTimeout(() => { unsub(); resolve(null); }, timeout);
+    const unsub = useWorkspaceStore.subscribe((state) => {
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (tab?.ptyId) { clearTimeout(timer); unsub(); resolve(tab.ptyId); }
+    });
+  });
+}
+
 export default function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // Tracks the id of the pending approval message so we can replace it
-  const pendingApprovalId = useRef<string | null>(null);
+  const pendingWaitingId = useRef<string | null>(null);
+  const pendingUnlisten = useRef<(() => void) | null>(null);
+  const pendingPtyId = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,24 +78,25 @@ export default function ChatPanel() {
     );
 
     unlisteners.push(
-      listen<string>("agent-approval-needed", (ev) => {
+      listen<string>("agent-command-to-terminal", (ev) => {
+        const suggestedCommand = ev.payload;
         const id = nextId();
-        pendingApprovalId.current = id;
+        pendingWaitingId.current = id;
         setMessages((prev) => [
           ...prev,
-          { id, role: "approval", content: "", command: ev.payload },
+          { id, role: "terminal-waiting", content: "", command: suggestedCommand },
         ]);
+        handleInjectToTerminal(suggestedCommand, id);
       })
     );
 
     unlisteners.push(
       listen<{ command: string; output: string }>("agent-tool-ran", (ev) => {
-        // Replace approval widget with the result
-        const approvalId = pendingApprovalId.current;
-        pendingApprovalId.current = null;
+        const waitingId = pendingWaitingId.current;
+        pendingWaitingId.current = null;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === approvalId
+            m.id === waitingId
               ? { ...m, role: "tool-ran" as Role, content: ev.payload.output, command: ev.payload.command }
               : m
           )
@@ -67,11 +106,10 @@ export default function ChatPanel() {
 
     unlisteners.push(
       listen("agent-done", () => {
-        // Dismiss any lingering approval widget (rejection path)
-        const approvalId = pendingApprovalId.current;
-        if (approvalId) {
-          pendingApprovalId.current = null;
-          setMessages((prev) => prev.filter((m) => m.id !== approvalId));
+        const waitingId = pendingWaitingId.current;
+        if (waitingId) {
+          pendingWaitingId.current = null;
+          setMessages((prev) => prev.filter((m) => m.id !== waitingId));
         }
         setSending(false);
       })
@@ -80,7 +118,127 @@ export default function ChatPanel() {
     return () => {
       unlisteners.forEach((p) => p.then((fn) => fn()));
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function handleInjectToTerminal(suggestedCommand: string, waitingMsgId: string) {
+    const store = useWorkspaceStore.getState();
+    const activeTab = store.tabs.find((t) => t.id === store.activeTabId);
+
+    let targetTabId: string;
+    let ptyId: string | null;
+
+    if (activeTab?.type === "terminal" && activeTab.ptyId) {
+      targetTabId = activeTab.id;
+      ptyId = activeTab.ptyId;
+    } else {
+      const newPane: Pane = {
+        id: `terminal-ai-${Date.now()}`,
+        type: "terminal",
+        label: "Terminal",
+        shell: "powershell",
+      };
+      store.addTab(newPane);
+      targetTabId = newPane.id;
+      ptyId = await waitForPtyId(targetTabId);
+    }
+
+    if (!ptyId) {
+      await invoke("agent_terminal_result", { command: "", output: "Failed to open terminal.", cancelled: true }).catch(console.error);
+      pendingWaitingId.current = null;
+      setMessages((prev) => prev.filter((m) => m.id !== waitingMsgId));
+      setSending(false);
+      return;
+    }
+
+    pendingPtyId.current = ptyId;
+
+    // Snapshot prompt for boundary detection
+    const promptSnapshot = snapshotPrompt(targetTabId);
+    function isPromptLine(line: string): boolean {
+      const t = line.trimEnd();
+      if (promptSnapshot && t.endsWith(promptSnapshot)) return true;
+      return PS_PROMPT_RE.test(t);
+    }
+
+    // Inject command into PTY without newline
+    const bytes = Array.from(new TextEncoder().encode(suggestedCommand));
+    await invoke("pty_write", { id: ptyId, data: bytes }).catch(console.error);
+
+    // Capture output
+    let accum = "";
+    let enterDetected = false;
+    let resultSent = false;
+    let captureUnlistenFn: (() => void) | null = null;
+
+    function cleanup() {
+      if (captureUnlistenFn) { captureUnlistenFn(); captureUnlistenFn = null; }
+      pendingUnlisten.current = null;
+      pendingPtyId.current = null;
+    }
+
+    function finishCapture(command: string, output: string, cancelled: boolean) {
+      if (resultSent) return;
+      resultSent = true;
+      cleanup();
+      invoke("agent_terminal_result", { command, output, cancelled }).catch(console.error);
+    }
+
+    const unlisten = await listen<number[]>(`pty-data-${ptyId}`, (ev) => {
+      if (resultSent) return;
+
+      const raw = new TextDecoder().decode(new Uint8Array(ev.payload));
+      accum += raw;
+
+      if (!enterDetected) {
+        // Wait for Enter: first \r\n in the stream
+        const nl = accum.indexOf("\r\n");
+        if (nl < 0) return;
+        enterDetected = true;
+        accum = accum.slice(nl + 2); // keep only post-Enter content
+      }
+
+      // Strip ANSI and scan for next prompt
+      const stripped = stripAnsi(accum);
+      const lines = stripped.split("\n");
+
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (isPromptLine(lines[i])) {
+          const outputLines = lines
+            .slice(0, i)
+            .map((l) => l.trimEnd())
+            .filter((l) => l.length > 0);
+
+          const isCancelled = outputLines.some((l) => l.includes("^C") || l.includes(""));
+
+          if (isCancelled) {
+            finishCapture("", "", true);
+          } else {
+            const output = outputLines.join("\n");
+            finishCapture(suggestedCommand, output, false);
+          }
+          return;
+        }
+      }
+    });
+
+    captureUnlistenFn = unlisten;
+    pendingUnlisten.current = cleanup;
+  }
+
+  async function handleCancel(waitingMsgId: string) {
+    const ptyId = pendingPtyId.current;
+    if (pendingUnlisten.current) {
+      pendingUnlisten.current();
+    }
+    // Send Ctrl+C to clear the pre-typed command in the terminal
+    if (ptyId) {
+      await invoke("pty_write", { id: ptyId, data: [0x03] }).catch(console.error);
+    }
+    pendingWaitingId.current = null;
+    setMessages((prev) => prev.filter((m) => m.id !== waitingMsgId));
+    await invoke("agent_terminal_result", { command: "", output: "", cancelled: true }).catch(console.error);
+  }
 
   async function handleSend() {
     const text = input.trim();
@@ -104,24 +262,6 @@ export default function ChatPanel() {
       ]);
       setSending(false);
     });
-  }
-
-  async function handleApprove(approved: boolean) {
-    await invoke("agent_approve", { approved }).catch(console.error);
-    if (!approved) {
-      // Rejection: remove approval widget immediately (agent-done will re-enable input)
-      const approvalId = pendingApprovalId.current;
-      pendingApprovalId.current = null;
-      setMessages((prev) => prev.filter((m) => m.id !== approvalId));
-    } else {
-      // Approval: replace widget with "Running…" placeholder
-      const approvalId = pendingApprovalId.current;
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === approvalId ? { ...m, role: "assistant" as Role, content: "執行中…" } : m
-        )
-      );
-    }
   }
 
   return (
@@ -157,15 +297,14 @@ export default function ChatPanel() {
               </div>
             );
           }
-          if (msg.role === "approval") {
+          if (msg.role === "terminal-waiting") {
             return (
               <div key={msg.id} style={assistantBubbleWrap}>
-                <div style={approvalBlock}>
-                  <div style={approvalLabel}>執行以下指令？</div>
-                  <div style={approvalCmd} className="selectable">{msg.command}</div>
-                  <div style={approvalButtons}>
-                    <button onClick={() => handleApprove(true)} style={btnApprove}>執行</button>
-                    <button onClick={() => handleApprove(false)} style={btnReject}>拒絕</button>
+                <div style={waitingBlock}>
+                  <div style={waitingLabel}>在 terminal 中等待執行…</div>
+                  <div style={waitingCmd} className="selectable">{msg.command}</div>
+                  <div style={waitingButtons}>
+                    <button onClick={() => handleCancel(msg.id)} style={btnCancel}>取消</button>
                   </div>
                 </div>
               </div>
@@ -228,28 +367,23 @@ const toolOutput: React.CSSProperties = {
   padding: "8px 10px", fontFamily: "'Space Mono', monospace",
   whiteSpace: "pre-wrap", lineHeight: 1.5,
 };
-const approvalBlock: React.CSSProperties = {
+const waitingBlock: React.CSSProperties = {
   border: "2px solid var(--accent)", borderRadius: 8,
   overflow: "hidden", fontSize: 13,
 };
-const approvalLabel: React.CSSProperties = {
+const waitingLabel: React.CSSProperties = {
   background: "var(--accent)", color: "#fff",
   padding: "6px 10px", fontWeight: 700, fontSize: 12,
 };
-const approvalCmd: React.CSSProperties = {
+const waitingCmd: React.CSSProperties = {
   padding: "8px 10px", fontFamily: "'Space Mono', monospace",
   whiteSpace: "pre-wrap", background: "var(--bg-panel)",
 };
-const approvalButtons: React.CSSProperties = {
+const waitingButtons: React.CSSProperties = {
   display: "flex", gap: 8, padding: "8px 10px",
   background: "var(--bg-panel)", borderTop: "1px solid var(--border-dash)",
 };
-const btnApprove: React.CSSProperties = {
-  background: "var(--accent)", color: "#fff",
-  border: "none", borderRadius: 6,
-  padding: "4px 14px", cursor: "pointer", fontSize: 13, fontFamily: "inherit",
-};
-const btnReject: React.CSSProperties = {
+const btnCancel: React.CSSProperties = {
   background: "none", border: "2px solid var(--border-dash)",
   borderRadius: 6, padding: "4px 14px",
   cursor: "pointer", fontSize: 13, fontFamily: "inherit",

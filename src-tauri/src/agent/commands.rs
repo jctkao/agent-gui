@@ -3,7 +3,7 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::ollama::call_ollama;
-use super::state::AgentState;
+use super::state::{AgentState, TerminalResult};
 
 #[tauri::command]
 pub async fn agent_start(
@@ -28,7 +28,6 @@ pub async fn agent_start(
 
 async fn run_loop(app: AppHandle, url: String, model: String) {
     loop {
-        // Build message list (prepend system prompt if set, then history)
         let messages = {
             let state = app.state::<Mutex<AgentState>>();
             let s = state.lock().unwrap();
@@ -51,7 +50,6 @@ async fn run_loop(app: AppHandle, url: String, model: String) {
                 let tool_calls = message["tool_calls"].as_array().cloned();
 
                 if let Some(calls) = tool_calls.filter(|v| !v.is_empty()) {
-                    // Append assistant message (with tool_calls) to history
                     {
                         let state = app.state::<Mutex<AgentState>>();
                         state.lock().unwrap().messages.push(message.clone());
@@ -64,55 +62,48 @@ async fn run_loop(app: AppHandle, url: String, model: String) {
                         .unwrap_or("")
                         .to_string();
 
-                    // Park: create oneshot, store sender, emit approval request, await receiver
-                    let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                    // Park: create oneshot, store sender, emit to terminal, await receiver
+                    let (tx, rx) = tokio::sync::oneshot::channel::<TerminalResult>();
                     {
                         let state = app.state::<Mutex<AgentState>>();
                         state.lock().unwrap().approval_tx = Some(tx);
                     }
-                    app.emit("agent-approval-needed", &command).ok();
+                    app.emit("agent-command-to-terminal", &command).ok();
 
-                    let approved = rx.await.unwrap_or(false);
+                    let result = rx.await.unwrap_or(TerminalResult {
+                        command: String::new(),
+                        output: String::new(),
+                        cancelled: true,
+                    });
 
-                    let tool_result = if approved {
-                        let cmd = command.clone();
-                        let output = tokio::task::spawn_blocking(move || {
-                            std::process::Command::new("powershell")
-                                .args(["-Command", &cmd])
-                                .output()
-                        })
-                        .await;
+                    if result.cancelled {
+                        {
+                            let state = app.state::<Mutex<AgentState>>();
+                            state.lock().unwrap().messages.push(json!({
+                                "role": "tool",
+                                "content": "User cancelled the command.",
+                                "tool_call_id": tool_call_id
+                            }));
+                        }
+                        app.emit("agent-done", ()).ok();
+                        break;
+                    }
 
-                        let combined = match output {
-                            Ok(Ok(o)) => {
-                                let mut out = String::from_utf8_lossy(&o.stdout).to_string();
-                                let err = String::from_utf8_lossy(&o.stderr).to_string();
-                                if !err.is_empty() {
-                                    out.push_str(&err);
-                                }
-                                out.trim().to_string()
-                            }
-                            Ok(Err(e)) => e.to_string(),
-                            Err(e) => e.to_string(),
-                        };
-
-                        app.emit("agent-tool-ran", json!({ "command": command, "output": combined })).ok();
-                        combined
-                    } else {
-                        "User rejected the command.".to_string()
-                    };
+                    app.emit("agent-tool-ran", json!({
+                        "command": result.command,
+                        "output": result.output
+                    })).ok();
 
                     {
                         let state = app.state::<Mutex<AgentState>>();
                         state.lock().unwrap().messages.push(json!({
                             "role": "tool",
-                            "content": tool_result,
+                            "content": result.output,
                             "tool_call_id": tool_call_id
                         }));
                     }
                     // continue loop — call Ollama again with tool result
                 } else {
-                    // Final text response
                     let content = message["content"].as_str().unwrap_or("").to_string();
                     {
                         let state = app.state::<Mutex<AgentState>>();
@@ -131,13 +122,17 @@ async fn run_loop(app: AppHandle, url: String, model: String) {
 }
 
 #[tauri::command]
-pub fn agent_approve(
-    approved: bool,
+pub fn agent_terminal_result(
+    command: String,
+    output: String,
+    cancelled: bool,
     state: State<'_, Mutex<AgentState>>,
 ) -> Result<(), String> {
     let tx = state.lock().unwrap().approval_tx.take();
     match tx {
-        Some(tx) => tx.send(approved).map_err(|_| "Failed to send approval signal".to_string()),
-        None => Err("No pending approval".to_string()),
+        Some(tx) => tx
+            .send(TerminalResult { command, output, cancelled })
+            .map_err(|_| "Failed to send terminal result".to_string()),
+        None => Err("No pending terminal operation".to_string()),
     }
 }

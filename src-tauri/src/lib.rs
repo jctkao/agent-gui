@@ -2,7 +2,7 @@ mod agent;
 mod commands;
 mod pty;
 
-use agent::commands::{agent_approve, agent_start};
+use agent::commands::{agent_start, agent_terminal_result};
 use agent::state::AgentState;
 use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
@@ -94,7 +94,7 @@ pub fn run() {
             pty_resize,
             pty_kill,
             agent_start,
-            agent_approve,
+            agent_terminal_result,
         ]);
 
     #[cfg(debug_assertions)]
