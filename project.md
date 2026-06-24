@@ -49,6 +49,26 @@ Rust: app.windows()["main"].add_child(WebviewBuilder, position, size)
 1. **Tab switching** — `WorkspacePanel.tsx` handles this in a `useEffect` on `activeTabId`
 2. **`+` dropdown opening** — `TabBar.tsx` calls `browser_hide` when `dropdownOpen` becomes true (and `browser_show` on close), because the dropdown extends into the pane area which the overlay covers
 
+### Vimium Keyboard Layer
+
+On every `PageLoadEvent::Finished` (non-`about:blank`), `lib.rs` injects `src-tauri/src/vimium.js` via `wv.eval(include_str!("vimium.js"))`. The script is embedded at compile time.
+
+The script is a self-contained IIFE with a `window.__vimiumInstalled` guard (safe to re-inject on full navigations; SPA navigations that don't trigger `PageLoadEvent::Finished` keep the already-installed handler).
+
+**Three modes:**
+- `normal` — Vim-style keys active (`j`/`k`/`d`/`u`/`gg`/`G` scroll, `H`/`L` history, `r` reload, `f` hint mode)
+- `hint` — yellow `position:fixed` letter labels over all visible clickable elements; typing the label fires `mousedown → mouseup → click`; `Esc` cancels
+- `insert` — auto-entered on `focusin` to editable elements; all keys pass through; `Esc` blurs and returns to normal
+
+**Key design decisions to keep in mind:**
+- `keydown` listener uses `useCapture: true` to intercept before page handlers
+- Scrollable-ancestor lookup: walks up from `document.activeElement`, then from `document.elementFromPoint(center)`, fallback to `document.scrollingElement`
+- Hint container attaches to `document.documentElement` (not `body`) to avoid `overflow:hidden` clipping
+- Hint mode exits on `scroll` events (hints would be misaligned after scroll)
+- Label character set: `sadfjklewcmpgh` — 14 home-row chars; single-char labels first, then pairs (covers up to 210 elements)
+
+**To modify key bindings:** edit the `switch (key)` block in `vimium.js`. All key handling is in that single file.
+
 ### Terminal PTY Pattern
 
 Each terminal tab connects to a real shell process via `portable-pty` (Rust, wezterm). The frontend renders with xterm.js.
@@ -96,10 +116,15 @@ TabBar
 
 ### Rust Backend (`src-tauri/src/`)
 
-- **`lib.rs`** — app entry: registers SQL migrations, plugins, manages `BrowserOverlayState` and `PtyManager`, registers all Tauri commands
-- **`commands/browser.rs`** — four Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`)
+- **`lib.rs`** — app entry: registers SQL migrations, plugins, manages `BrowserOverlayState`, `PtyManager`, and `AgentState`; registers all Tauri commands; injects `vimium.js` and the SPA navigation monitor on each page load
+- **`vimium.js`** — Vimium-style keyboard script embedded via `include_str!` and injected into the browser overlay on every page load (see Vimium Keyboard Layer above)
+- **`commands/browser.rs`** — Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`)
 - **`pty.rs`** — PTY session management: `PtyManager` (`Mutex<HashMap<String, PtySession>>`), commands `pty_create / pty_write / pty_resize / pty_kill`. Each session spawns a background thread that reads PTY master output and emits `pty-data-{id}` Tauri events.
-- SQLite DB (`settings.db`) is initialized on first launch via `tauri-plugin-sql` migrations; the schema is a single `settings (key, value)` key-value table
+- **`agent/`** — Ollama-backed agentic loop:
+  - `state.rs` — `AgentState`: conversation `messages` (JSON), optional `system_prompt`, and `approval_tx` (oneshot channel for terminal result handoff)
+  - `ollama.rs` — `call_ollama()`: POST to Ollama `/api/chat` with tool definitions
+  - `commands.rs` — `agent_start`: pushes user message, spawns `run_loop` on tokio; `run_loop` calls Ollama repeatedly, parks on `agent-command-to-terminal` events and resumes when `agent_terminal_result` delivers the output; `agent_terminal_result`: resolves the parked oneshot with terminal output
+- SQLite DB (`settings.db`) is initialized on first launch via `tauri-plugin-sql` migrations; the schema is a single `settings (key, value)` key-value table. Keys in use: `anthropic_api_key`, `ollama_url`, `ollama_model`
 
 ### Frontend (`src/`)
 
@@ -128,8 +153,28 @@ TabBar
 
 `AI Workbench Wireframes.dc.html` — the original low-fidelity wireframe (open in a browser with `support.js` in the same directory). Two frames: **A** (tab mode) and **B** (split mode). The warm neutral palette and dashed-border aesthetic from this wireframe are the visual target.
 
+### Chat Panel / Agent Data Flow
+
+```
+ChatPanel (React)
+  ├── sends: invoke("agent_start", { userMessage, ollamaUrl, ollamaModel })
+  │     → Rust spawns run_loop (tokio task)
+  │     → run_loop calls Ollama; on tool_call: parks, emits "agent-command-to-terminal"
+  │
+  ├── listens: "agent-command-to-terminal"
+  │     → pre-types command into active Terminal PTY (without Enter)
+  │     → listens to pty-data-{ptyId} to capture output after user confirms (Enter)
+  │     → invoke("agent_terminal_result", { command, output, cancelled })
+  │     → unblocks run_loop, which continues with tool result
+  │
+  └── listens: "agent-message" / "agent-done"
+        → displays assistant reply, re-enables input
+```
+
+The user always sees the command before it runs — they press Enter in the terminal to confirm, or `Ctrl+C` to cancel. There is no auto-execution.
+
 ## OpenSpec Changes
 
 Planning artifacts live in `openspec/changes/`. Completed changes are archived under `openspec/changes/archive/`. Main capability specs are in `openspec/specs/`.
 
-There are currently no active changes. Use `/opsx:propose` to start a new change.
+Active change: `browser-vimium-mode` (implementation complete, pending manual verification). Use `/opsx:archive browser-vimium-mode` when verified.

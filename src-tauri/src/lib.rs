@@ -52,6 +52,7 @@ pub fn run() {
                             let url = payload.url().to_string();
                             if url != "about:blank" {
                                 app_handle.emit("browser-url-changed", url).ok();
+                                wv.eval(include_str!("vimium.js")).ok();
                                 // Inject SPA navigation monitoring.
                                 // Uses window.__TAURI__ if available; logs availability for debugging.
                                 wv.eval(r#"
