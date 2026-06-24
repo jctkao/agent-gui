@@ -18,6 +18,7 @@ export default function TerminalPane({ pane, isActive }: Props) {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeTab = useWorkspaceStore((s) => s.closeTab);
+  const setPtyId = useWorkspaceStore((s) => s.setPtyId);
 
   // Mount: create terminal + PTY session
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function TerminalPane({ pane, isActive }: Props) {
           return;
         }
         ptyIdRef.current = ptyId;
+        setPtyId(pane.id, ptyId);
 
         // Forward PTY output to xterm
         unlistenData = await listen<number[]>(`pty-data-${ptyId}`, (ev) => {

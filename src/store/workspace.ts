@@ -8,6 +8,7 @@ export interface Pane {
   label: string;
   url?: string;
   shell?: "powershell" | "wsl";
+  ptyId?: string;
 }
 
 export type WorkspaceMode = "tab" | "split";
@@ -20,6 +21,7 @@ interface WorkspaceState {
   setActiveTab: (id: string) => void;
   addTab: (pane: Pane) => void;
   closeTab: (id: string) => void;
+  setPtyId: (tabId: string, ptyId: string) => void;
 }
 
 const DEFAULT_TABS: Pane[] = [
@@ -44,4 +46,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         s.activeTabId === id ? (tabs[0]?.id ?? "") : s.activeTabId;
       return { tabs, activeTabId };
     }),
+  setPtyId: (tabId, ptyId) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, ptyId } : t)),
+    })),
 }));
