@@ -73,6 +73,7 @@ export default function SettingsModal({ onClose }: Props) {
   }
 
   const effectiveMap = resolveBindings(overrides);
+  const appActions     = ACTION_DEFINITIONS.filter((a) => a.context === "app");
   const browserActions = ACTION_DEFINITIONS.filter((a) => a.context === "browser");
 
   return (
@@ -152,15 +153,7 @@ export default function SettingsModal({ onClose }: Props) {
             {activeTab === "shortcuts" && (
               <div style={panel}>
                 <div style={shortcutsHeader}>
-                  <div>
-                    <h2 style={panelTitle}>Keyboard Shortcuts</h2>
-                    <p style={shortcutNote}>
-                      適用於瀏覽器面板。Changes take effect on the next page load.
-                      <br />
-                      <span style={{ color: "var(--accent)", fontWeight: 700 }}>*</span>
-                      {" "}marks customized bindings.
-                    </p>
-                  </div>
+                  <h2 style={panelTitle}>Keyboard Shortcuts</h2>
                   <div style={{ paddingTop: 4 }}>
                     {confirmRestore ? (
                       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -175,6 +168,44 @@ export default function SettingsModal({ onClose }: Props) {
                     )}
                   </div>
                 </div>
+
+                <h3 style={sectionTitle}>App Shortcuts</h3>
+                <p style={shortcutNote}>
+                  Changes take effect immediately.{" "}
+                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>*</span>
+                  {" "}marks customized bindings.
+                </p>
+                <table style={table}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Action</th>
+                      <th style={th}>Key</th>
+                      <th style={th}></th>
+                      <th style={th}></th>
+                      <th style={th}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appActions.map((action) => (
+                      <KeybindingRow
+                        key={action.id}
+                        action={action}
+                        effectiveKey={effectiveMap[action.id]}
+                        isOverride={action.id in overrides}
+                        effectiveMap={effectiveMap}
+                        onSave={handleBindingSave}
+                        onReset={handleBindingReset}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+
+                <h3 style={{ ...sectionTitle, marginTop: 28 }}>Browser Shortcuts</h3>
+                <p style={shortcutNote}>
+                  適用於瀏覽器面板。Changes take effect on the next page load.{" "}
+                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>*</span>
+                  {" "}marks customized bindings.
+                </p>
                 <table style={table}>
                   <thead>
                     <tr>
@@ -299,8 +330,12 @@ const shortcutNote: React.CSSProperties = {
   margin: "0 0 16px", lineHeight: 1.6,
 };
 const shortcutsHeader: React.CSSProperties = {
-  display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-  borderBottom: "2px dashed var(--border-dash)", paddingBottom: 12, marginBottom: 12,
+  display: "flex", justifyContent: "space-between", alignItems: "center",
+  borderBottom: "2px dashed var(--border-dash)", paddingBottom: 12, marginBottom: 16,
+};
+const sectionTitle: React.CSSProperties = {
+  fontSize: 14, fontWeight: 700, margin: "0 0 6px",
+  color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em",
 };
 const table: React.CSSProperties = {
   width: "100%", borderCollapse: "collapse",
