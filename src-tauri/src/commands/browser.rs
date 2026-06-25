@@ -110,3 +110,11 @@ pub fn browser_reload(app: AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn browser_focus(app: AppHandle) -> Result<(), String> {
+    if let Some(wv) = app.get_webview("browser-overlay") {
+        wv.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

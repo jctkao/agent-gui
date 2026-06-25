@@ -1,30 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { useWorkspaceStore } from "../../store/workspace";
-import SettingsModal from "../settings/SettingsModal";
 
-export default function TitleBar() {
-  const [showSettings, setShowSettings] = useState(false);
+interface Props {
+  onOpenSettings: () => void;
+}
+
+export default function TitleBar({ onOpenSettings }: Props) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<'min' | 'max' | 'close' | null>(null);
   const win = getCurrentWindow();
-  const { tabs, activeTabId } = useWorkspaceStore();
-
-  function isBrowserActive() {
-    return tabs.find(t => t.id === activeTabId)?.type === 'browser';
-  }
-
-  function openSettings() {
-    if (isBrowserActive()) invoke('browser_hide').catch(console.error);
-    setShowSettings(true);
-  }
-
-  function closeSettings() {
-    setShowSettings(false);
-    if (isBrowserActive()) invoke('browser_show').catch(console.error);
-  }
 
   useEffect(() => {
     win.isMaximized().then(setIsMaximized);
@@ -38,7 +22,7 @@ export default function TitleBar() {
   return (
     <>
       <div style={bar}>
-        <button style={settingsBtn} onClick={openSettings} title="設定">⚙</button>
+        <button style={settingsBtn} onClick={onOpenSettings} title="設定">⚙</button>
         <span style={title} data-tauri-drag-region>AI Workbench</span>
         <div style={controls}>
           <button
@@ -88,10 +72,6 @@ export default function TitleBar() {
           </button>
         </div>
       </div>
-      {showSettings && createPortal(
-        <SettingsModal onClose={closeSettings} />,
-        document.body
-      )}
     </>
   );
 }

@@ -7,7 +7,7 @@ use agent::skills::SkillManager;
 use agent::state::AgentState;
 use rig::memory::InMemoryConversationMemory;
 use commands::browser::{
-    browser_back, browser_forward, browser_hide, browser_open, browser_reload,
+    browser_back, browser_focus, browser_forward, browser_hide, browser_open, browser_reload,
     browser_set_rect, browser_show, BrowserOverlayState,
 };
 use commands::keybindings::{bindings_js, sync_keybindings, KeybindingState};
@@ -105,6 +105,7 @@ pub fn run() {
             browser_back,
             browser_forward,
             browser_reload,
+            browser_focus,
             pty_create,
             pty_write,
             pty_resize,

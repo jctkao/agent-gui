@@ -23,9 +23,14 @@ export const ACTION_DEFINITIONS: ActionDef[] = [
   { id: "reload",           label: "Reload page",         context: "browser", defaultKey: "r"  },
   { id: "hint_mode",        label: "Hint mode (click)",   context: "browser", defaultKey: "f"  },
 
-  // App-level action slots (unimplemented — reserved for future use)
-  { id: "open_settings",    label: "Open settings",       context: "app",     defaultKey: "Ctrl+," },
-  { id: "focus_chat",       label: "Focus chat input",    context: "app",     defaultKey: "Ctrl+l" },
+  // App-level actions
+  { id: "open_settings",    label: "Open settings",       context: "app", defaultKey: "Ctrl+," },
+  { id: "focus_chat",       label: "Focus chat input",    context: "app", defaultKey: "Alt+n"  },
+  { id: "focus_workspace",  label: "Focus workspace",     context: "app", defaultKey: "Alt+m"  },
+  { id: "tab_prev",         label: "Previous tab",        context: "app", defaultKey: "Alt+j"  },
+  { id: "tab_next",         label: "Next tab",            context: "app", defaultKey: "Alt+k"  },
+  { id: "tab_first",        label: "First tab",           context: "app", defaultKey: "Alt+1"  },
+  { id: "tab_last",         label: "Last tab",            context: "app", defaultKey: "Alt+0"  },
 ];
 
 /** Overrides map: action id → user-set key (only entries that differ from default). */
