@@ -3,6 +3,7 @@ mod commands;
 mod pty;
 
 use agent::commands::{agent_start, agent_terminal_result};
+use agent::skills::SkillManager;
 use agent::state::AgentState;
 use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
@@ -23,6 +24,11 @@ pub fn run() {
         kind: MigrationKind::Up,
     }];
 
+    let skills_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".agent-skills");
+    let skill_manager = SkillManager::load(&skills_dir);
+
     let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -33,6 +39,7 @@ pub fn run() {
         .manage(Mutex::new(BrowserOverlayState { last_rect: None }))
         .manage(PtyManager::default())
         .manage(Mutex::new(AgentState::default()))
+        .manage(skill_manager)
         .setup(|app| {
             // Create the browser overlay webview once, at startup, off-screen.
             // Runtime add_child deadlocks on Windows WebView2 (see commands/browser.rs);

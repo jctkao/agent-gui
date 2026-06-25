@@ -62,6 +62,9 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Language Preference
+
+Talk to me and write documents, including proposal, design, and spec, in English, even if I talk to you in Traditional Chinese.
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

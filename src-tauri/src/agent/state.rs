@@ -1,4 +1,4 @@
-use serde_json::Value;
+use rig::completion::Message;
 use tokio::sync::oneshot;
 
 pub struct TerminalResult {
@@ -8,17 +8,15 @@ pub struct TerminalResult {
 }
 
 pub struct AgentState {
-    pub messages: Vec<Value>,
+    pub chat_history: Vec<Message>,
     pub approval_tx: Option<oneshot::Sender<TerminalResult>>,
-    pub system_prompt: Option<String>,
 }
 
 impl Default for AgentState {
     fn default() -> Self {
         AgentState {
-            messages: Vec::new(),
+            chat_history: Vec::new(),
             approval_tx: None,
-            system_prompt: None,
         }
     }
 }

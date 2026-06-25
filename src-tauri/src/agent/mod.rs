@@ -1,3 +1,4 @@
 pub mod commands;
-pub mod ollama;
+pub mod skills;
 pub mod state;
+pub mod tools;
