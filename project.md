@@ -49,25 +49,43 @@ Rust: app.windows()["main"].add_child(WebviewBuilder, position, size)
 1. **Tab switching** — `WorkspacePanel.tsx` handles this in a `useEffect` on `activeTabId`
 2. **`+` dropdown opening** — `TabBar.tsx` calls `browser_hide` when `dropdownOpen` becomes true (and `browser_show` on close), because the dropdown extends into the pane area which the overlay covers
 
+### App-Level Keyboard Shortcuts
+
+App-level shortcuts (Alt+N, Alt+J/K, Alt+1/0, Ctrl+,, etc.) work from any pane — browser overlay, terminal, or editor — and are user-configurable.
+
+**Key design:**
+- Definitions live in `src/lib/keybindings.ts` (`ACTION_DEFINITIONS`, context `"app"`). Defaults mirror `DEFAULT_APP_BINDINGS` in `src-tauri/src/commands/keybindings.rs` — these two must stay in sync (both produce `"Alt+n"` style strings via `e.key`).
+- User overrides stored in SQLite via `sync_keybindings` / `saveOverrides`; loaded into `reverseMap` (key → actionId) in `App.tsx` on mount.
+- `App.tsx` registers a **capture-phase** `keydown` listener (`addEventListener("keydown", handler, true)`) so xterm.js's `stopPropagation()` cannot block it. On match, calls `e.stopPropagation()` to prevent xterm from also receiving the key.
+- Actions that move focus away from the browser overlay must call `invoke("main_focus")` first — DOM `.focus()` alone doesn't transfer OS keyboard focus between WebView2 controllers. `focus_chat` and `focusPane` (terminal branch) both do this.
+
+**Forwarding from the browser overlay:**
+The browser overlay is a separate WebView2 process — its keydown events never reach `App.tsx`. `vimium.js` handles this: it also builds `APP_KEY_MAP` from `window.__app_bindings` (injected by `bindings_js()` in Rust) and, on match in Normal mode, calls `window.__TAURI__.event.emit('app-action', actionId)`. The main webview's `listen("app-action", ...)` handler dispatches the action.
+
+**Why `emit` not `invoke`:** `browser-overlay.json` capability only grants `core:event:allow-emit`. Custom Tauri commands invoked from the overlay are blocked by the ACL. Tauri event emission is already allowed and broadcasts to all webviews.
+
+**React StrictMode + async `listen()`:** `listen()` returns a promise; StrictMode mounts/unmounts effects twice. Cleanup runs before the promise resolves, leaking a listener. Fixed with an `active` flag — if cleanup ran first, `fn()` is called immediately when the promise resolves.
+
 ### Vimium Keyboard Layer
 
-On every `PageLoadEvent::Finished` (non-`about:blank`), `lib.rs` injects `src-tauri/src/vimium.js` via `wv.eval(include_str!("vimium.js"))`. The script is embedded at compile time.
+On every `PageLoadEvent::Finished` (non-`about:blank`), `lib.rs` injects `src-tauri/src/vimium.js` via `wv.eval(include_str!("vimium.js"))`. The script is embedded at compile time. `bindings_js()` is injected first (sets `window.__bindings` and `window.__app_bindings`), then `vimium.js`.
 
 The script is a self-contained IIFE with a `window.__vimiumInstalled` guard (safe to re-inject on full navigations; SPA navigations that don't trigger `PageLoadEvent::Finished` keep the already-installed handler).
 
 **Three modes:**
-- `normal` — Vim-style keys active (`j`/`k`/`d`/`u`/`gg`/`G` scroll, `H`/`L` history, `r` reload, `f` hint mode)
+- `normal` — Vim-style keys active (`j`/`k`/`d`/`u`/`gg`/`G` scroll, `H`/`L` history, `r` reload, `f` hint mode). App-level shortcuts (`APP_KEY_MAP`) are checked first and forwarded via `emit('app-action', ...)`.
 - `hint` — yellow `position:fixed` letter labels over all visible clickable elements; typing the label fires `mousedown → mouseup → click`; `Esc` cancels
 - `insert` — auto-entered on `focusin` to editable elements; all keys pass through; `Esc` blurs and returns to normal
 
 **Key design decisions to keep in mind:**
 - `keydown` listener uses `useCapture: true` to intercept before page handlers
+- App-level keys are checked before Vimium browser keys in Normal mode; app shortcuts are NOT active in Insert or Hint mode
 - Scrollable-ancestor lookup: walks up from `document.activeElement`, then from `document.elementFromPoint(center)`, fallback to `document.scrollingElement`
 - Hint container attaches to `document.documentElement` (not `body`) to avoid `overflow:hidden` clipping
 - Hint mode exits on `scroll` events (hints would be misaligned after scroll)
 - Label character set: `sadfjklewcmpgh` — 14 home-row chars; single-char labels first, then pairs (covers up to 210 elements)
 
-**To modify key bindings:** edit the `switch (key)` block in `vimium.js`. All key handling is in that single file.
+**To modify browser key bindings:** edit `vimium.js`. **To modify app-level bindings:** edit `ACTION_DEFINITIONS` in `keybindings.ts` and the matching entry in `DEFAULT_APP_BINDINGS` in `keybindings.rs`.
 
 ### Terminal PTY Pattern
 
@@ -118,7 +136,8 @@ TabBar
 
 - **`lib.rs`** — app entry: registers SQL migrations, plugins, manages `BrowserOverlayState`, `PtyManager`, and `AgentState`; registers all Tauri commands; injects `vimium.js` and the SPA navigation monitor on each page load
 - **`vimium.js`** — Vimium-style keyboard script embedded via `include_str!` and injected into the browser overlay on every page load (see Vimium Keyboard Layer above)
-- **`commands/browser.rs`** — Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`)
+- **`commands/browser.rs`** — Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`). Also contains `browser_focus` (focuses overlay WebView2 controller) and `main_focus` (focuses main webview controller via `get_webview("main").set_focus()`) — these are distinct from window focus.
+- **`commands/keybindings.rs`** — `KeybindingState` (Mutex over user override map), `bindings_js()` (builds the JS snippet injected before vimium.js — sets both `window.__bindings` for Vimium and `window.__app_bindings` for app-level shortcuts), `sync_keybindings` command (updates state from frontend after user saves settings)
 - **`pty.rs`** — PTY session management: `PtyManager` (`Mutex<HashMap<String, PtySession>>`), commands `pty_create / pty_write / pty_resize / pty_kill`. Each session spawns a background thread that reads PTY master output and emits `pty-data-{id}` Tauri events.
 - **`agent/`** — Ollama-backed agentic loop:
   - `state.rs` — `AgentState`: conversation `messages` (JSON), optional `system_prompt`, and `approval_tx` (oneshot channel for terminal result handoff)

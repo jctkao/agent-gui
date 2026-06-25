@@ -83,6 +83,16 @@
     return map;
   }());
 
+  // Inverted map: key_string → app action id (forwarded to main webview via IPC)
+  var APP_KEY_MAP = (function () {
+    var map = {};
+    var bindings = window.__app_bindings || {};
+    for (var id in bindings) {
+      map[bindings[id]] = id;
+    }
+    return map;
+  }());
+
   // ─── Generic sequence handler ────────────────────────────────────────────────
   var pendingSeq = '';
   var seqTimer = null;
@@ -262,6 +272,13 @@
              : e.altKey  ? 'Alt+'   + e.key
              : e.metaKey ? 'Meta+'  + e.key
              : e.key;
+
+    // App-level shortcuts take priority: forward to main webview and stop.
+    if (APP_KEY_MAP[key] && window.__TAURI__ && window.__TAURI__.event) {
+      e.preventDefault();
+      window.__TAURI__.event.emit('app-action', APP_KEY_MAP[key]);
+      return;
+    }
 
     var newSeq = pendingSeq + key;
 

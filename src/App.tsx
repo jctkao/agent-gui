@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import TitleBar from "./components/layout/TitleBar";
@@ -21,7 +22,9 @@ function keyEventToString(e: KeyboardEvent): string {
 
 function focusPane(tabId: string, tabType: PaneType) {
   if (tabType === "terminal") {
-    getTerminal(tabId)?.focus();
+    invoke("main_focus")
+      .then(() => getTerminal(tabId)?.focus())
+      .catch(console.error);
   } else if (tabType === "browser") {
     invoke("browser_focus").catch(console.error);
   }
@@ -46,12 +49,67 @@ export default function App() {
     }
   }, []);
 
+  const dispatchAction = useCallback((actionId: string, e?: KeyboardEvent) => {
+    const { tabs, activeTabId, setActiveTab } = useWorkspaceStore.getState();
+
+    function selectTab(index: number) {
+      const tab = tabs[index];
+      if (!tab) return;
+      setActiveTab(tab.id);
+      setTimeout(() => focusPane(tab.id, tab.type), 80);
+    }
+
+    switch (actionId) {
+      case "focus_chat": {
+        e?.preventDefault();
+        invoke("main_focus")
+          .then(() => document.getElementById("chat-input")?.focus())
+          .catch(console.error);
+        break;
+      }
+      case "focus_workspace": {
+        e?.preventDefault();
+        const active = tabs.find((t) => t.id === activeTabId);
+        if (active) focusPane(active.id, active.type);
+        break;
+      }
+      case "tab_prev": {
+        e?.preventDefault();
+        const idx = tabs.findIndex((t) => t.id === activeTabId);
+        if (idx > 0) selectTab(idx - 1);
+        break;
+      }
+      case "tab_next": {
+        e?.preventDefault();
+        const idx = tabs.findIndex((t) => t.id === activeTabId);
+        if (idx < tabs.length - 1) selectTab(idx + 1);
+        break;
+      }
+      case "tab_first": {
+        e?.preventDefault();
+        selectTab(0);
+        break;
+      }
+      case "tab_last": {
+        e?.preventDefault();
+        selectTab(tabs.length - 1);
+        break;
+      }
+      case "open_settings": {
+        e?.preventDefault();
+        openSettings();
+        break;
+      }
+    }
+  }, [openSettings]);
+
   useEffect(() => {
     let reverseMap: Record<string, string> = {};
+    let active = true;
+    let unlistenAppAction: (() => void) | undefined;
 
     loadOverrides().then((overrides) => {
       const effective = resolveBindings(overrides);
-      // Build reverse map: key string → action id (app context only)
       for (const [id, key] of Object.entries(effective)) {
         reverseMap[key] = id;
       }
@@ -61,61 +119,28 @@ export default function App() {
       const key = keyEventToString(e);
       const actionId = reverseMap[key];
       if (!actionId) return;
-
-      const { tabs, activeTabId, setActiveTab } = useWorkspaceStore.getState();
-
-      function selectTab(index: number) {
-        const tab = tabs[index];
-        if (!tab) return;
-        setActiveTab(tab.id);
-        setTimeout(() => focusPane(tab.id, tab.type), 80);
-      }
-
-      switch (actionId) {
-        case "focus_chat": {
-          e.preventDefault();
-          document.getElementById("chat-input")?.focus();
-          break;
-        }
-        case "focus_workspace": {
-          e.preventDefault();
-          const active = tabs.find((t) => t.id === activeTabId);
-          if (active) focusPane(active.id, active.type);
-          break;
-        }
-        case "tab_prev": {
-          e.preventDefault();
-          const idx = tabs.findIndex((t) => t.id === activeTabId);
-          if (idx > 0) selectTab(idx - 1);
-          break;
-        }
-        case "tab_next": {
-          e.preventDefault();
-          const idx = tabs.findIndex((t) => t.id === activeTabId);
-          if (idx < tabs.length - 1) selectTab(idx + 1);
-          break;
-        }
-        case "tab_first": {
-          e.preventDefault();
-          selectTab(0);
-          break;
-        }
-        case "tab_last": {
-          e.preventDefault();
-          selectTab(tabs.length - 1);
-          break;
-        }
-        case "open_settings": {
-          e.preventDefault();
-          openSettings();
-          break;
-        }
-      }
+      e.stopPropagation();
+      dispatchAction(actionId, e);
     }
 
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openSettings]);
+    document.addEventListener("keydown", onKeyDown, true);
+
+    listen<string>("app-action", (event) => {
+      dispatchAction(event.payload);
+    }).then((fn) => {
+      if (active) {
+        unlistenAppAction = fn;
+      } else {
+        fn(); // StrictMode cleanup ran before promise resolved — unlisten immediately
+      }
+    });
+
+    return () => {
+      active = false;
+      document.removeEventListener("keydown", onKeyDown, true);
+      unlistenAppAction?.();
+    };
+  }, [dispatchAction]);
 
   return (
     <div style={root}>

@@ -88,6 +88,20 @@ Chat Panel 連接本機 **Ollama** 模型，支援工具呼叫（tool calling）
 
 AI 僅能透過 terminal 執行指令，無法直接存取檔案系統或網路。
 
+## App 全域鍵盤快捷鍵
+
+以下快捷鍵在任何 pane（包含 Browser 分頁、Terminal、編輯器）下均有效，可在設定中自訂。
+
+| 按鍵 | 功能 |
+|------|------|
+| `Alt+N` | 聚焦 AI 對話輸入框 |
+| `Alt+M` | 聚焦目前作用中的工作區 pane |
+| `Alt+J` | 切換到上一個分頁 |
+| `Alt+K` | 切換到下一個分頁 |
+| `Alt+1` | 切換到第一個分頁 |
+| `Alt+0` | 切換到最後一個分頁 |
+| `Ctrl+,` | 開啟設定 |
+
 ## Browser Pane 鍵盤快捷鍵（Vimium 風格）
 
 Browser pane 支援 Vimium 風格的鍵盤操作。有三種模式：

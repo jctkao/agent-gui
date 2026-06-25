@@ -118,3 +118,11 @@ pub fn browser_focus(app: AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn main_focus(app: AppHandle) -> Result<(), String> {
+    if let Some(wv) = app.get_webview("main") {
+        wv.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
