@@ -10,6 +10,7 @@ use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
     browser_set_rect, browser_show, BrowserOverlayState,
 };
+use commands::keybindings::{bindings_js, sync_keybindings, KeybindingState};
 use pty::{pty_create, pty_kill, pty_resize, pty_write, PtyManager};
 use std::sync::Mutex;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
@@ -38,6 +39,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(BrowserOverlayState { last_rect: None }))
+        .manage(KeybindingState::default())
         .manage(PtyManager::default())
         .manage(Mutex::new(AgentState::default()))
         .manage(InMemoryConversationMemory::new())
@@ -61,6 +63,10 @@ pub fn run() {
                             let url = payload.url().to_string();
                             if url != "about:blank" {
                                 app_handle.emit("browser-url-changed", url).ok();
+                                let kb = app_handle.state::<KeybindingState>();
+                                let overrides = kb.0.lock().unwrap_or_else(|e| e.into_inner());
+                                wv.eval(&bindings_js(&overrides)).ok();
+                                drop(overrides);
                                 wv.eval(include_str!("vimium.js")).ok();
                                 // Inject SPA navigation monitoring.
                                 // Uses window.__TAURI__ if available; logs availability for debugging.
@@ -105,6 +111,7 @@ pub fn run() {
             pty_kill,
             agent_start,
             agent_terminal_result,
+            sync_keybindings,
         ]);
 
     #[cfg(debug_assertions)]

@@ -2,11 +2,11 @@
   if (window.__vimiumInstalled) return;
   window.__vimiumInstalled = true;
 
-  // ─── Constants ────────────────────────────────────────────────────────────
+  // ─── Constants ──────────────────────────────────────────────────────────────
   var HINT_CHARS = 'sadfjklewcmpgh';
   var SCROLL_STEP = 80;
 
-  // ─── Mode ─────────────────────────────────────────────────────────────────
+  // ─── Mode ───────────────────────────────────────────────────────────────────
   // 'normal' | 'hint' | 'insert'
   var mode = 'normal';
 
@@ -24,7 +24,7 @@
     if (isEditable(e.target)) mode = 'normal';
   }, true);
 
-  // ─── Scrollable ancestor lookup ───────────────────────────────────────────
+  // ─── Scrollable ancestor lookup ─────────────────────────────────────────────
   function isScrollable(el) {
     if (!el || el === document.documentElement) return false;
     var style = getComputedStyle(el);
@@ -34,13 +34,13 @@
 
   function findScrollable() {
     var el;
-    // 1. Walk up from active element
+    // 1. Walk up active element
     el = document.activeElement;
     while (el && el !== document.documentElement) {
       if (isScrollable(el)) return el;
       el = el.parentElement;
     }
-    // 2. Walk up from viewport centre
+    // 2. Walk up viewport centre
     el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
     while (el && el !== document.documentElement) {
       if (isScrollable(el)) return el;
@@ -58,13 +58,50 @@
     (document.scrollingElement || document.documentElement).scrollTo({ left: x, top: y, behavior: 'smooth' });
   }
 
-  // ─── g-key sequence (gg → top) ────────────────────────────────────────────
-  var gPending = false;
-  var gTimer = null;
+  // ─── Actions ────────────────────────────────────────────────────────────────
+  var ACTIONS = {
+    scroll_down:      function () { doScrollBy(0,  SCROLL_STEP); },
+    scroll_up:        function () { doScrollBy(0, -SCROLL_STEP); },
+    scroll_half_down: function () { doScrollBy(0,  window.innerHeight / 2); },
+    scroll_half_up:   function () { doScrollBy(0, -window.innerHeight / 2); },
+    scroll_to_top:    function () { doScrollTo(0, 0); },
+    scroll_to_bottom: function () { doScrollTo(0, document.documentElement.scrollHeight); },
+    history_back:     function () { history.back(); },
+    history_forward:  function () { history.forward(); },
+    reload:           function () { location.reload(); },
+    hint_mode:        function () { enterHintMode(); },
+  };
 
-  function clearG() {
-    gPending = false;
-    if (gTimer) { clearTimeout(gTimer); gTimer = null; }
+  // ─── Key → action lookup (built from window.__bindings at install time) ─────
+  // Inverted map: key_string → action function
+  var KEY_MAP = (function () {
+    var map = {};
+    var bindings = window.__bindings || {};
+    for (var id in bindings) {
+      if (ACTIONS[id]) map[bindings[id]] = ACTIONS[id];
+    }
+    return map;
+  }());
+
+  // ─── Generic sequence handler ────────────────────────────────────────────────
+  var pendingSeq = '';
+  var seqTimer = null;
+
+  function clearSeq() {
+    pendingSeq = '';
+    if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+  }
+
+  function hasPrefix(seq) {
+    for (var k in KEY_MAP) {
+      if (k !== seq && k.startsWith(seq)) return true;
+    }
+    return false;
+  }
+
+  function commitSeq(seq) {
+    clearSeq();
+    if (KEY_MAP[seq]) KEY_MAP[seq]();
   }
 
   // ─── Hint mode ────────────────────────────────────────────────────────────
@@ -192,14 +229,12 @@
 
   // ─── Main key handler ─────────────────────────────────────────────────────
   document.addEventListener('keydown', function (e) {
-    // Pass through any modified keys (Ctrl+C, Alt+Left, etc.)
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-
     // Insert mode: only handle Escape
     if (mode === 'insert') {
       if (e.key === 'Escape') {
         if (document.activeElement) document.activeElement.blur();
         mode = 'normal';
+        e.preventDefault();
       }
       return;
     }
@@ -208,13 +243,9 @@
     if (mode === 'hint') {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === 'Escape') {
-        exitHintMode();
-        return;
-      }
+      if (e.key === 'Escape') { exitHintMode(); return; }
       if (e.key === 'Backspace') {
         hintState.typed = hintState.typed.slice(0, -1);
-        // Re-show all hints before re-filtering
         hintState.items.forEach(function (item) { item.div.style.display = ''; });
         updateHints();
         return;
@@ -226,34 +257,47 @@
       return;
     }
 
-    // Normal mode
-    var key = e.key;
+    // Normal mode — modifier combos are passed through except when they form a binding
+    var key = e.ctrlKey  ? 'Ctrl+'  + e.key
+             : e.altKey  ? 'Alt+'   + e.key
+             : e.metaKey ? 'Meta+'  + e.key
+             : e.key;
 
-    // g / gg sequence
-    if (key === 'g') {
+    var newSeq = pendingSeq + key;
+
+    if (KEY_MAP[newSeq]) {
       e.preventDefault();
-      if (gPending) {
-        clearG();
-        doScrollTo(0, 0);
-      } else {
-        gPending = true;
-        gTimer = setTimeout(clearG, 1000);
-      }
+      commitSeq(newSeq);
       return;
     }
-    clearG();
 
-    switch (key) {
-      case 'j': e.preventDefault(); doScrollBy(0,  SCROLL_STEP); break;
-      case 'k': e.preventDefault(); doScrollBy(0, -SCROLL_STEP); break;
-      case 'd': e.preventDefault(); doScrollBy(0,  window.innerHeight / 2); break;
-      case 'u': e.preventDefault(); doScrollBy(0, -window.innerHeight / 2); break;
-      case 'G': e.preventDefault(); doScrollTo(0, document.documentElement.scrollHeight); break;
-      case 'H': e.preventDefault(); history.back(); break;
-      case 'L': e.preventDefault(); history.forward(); break;
-      case 'r': e.preventDefault(); location.reload(); break;
-      case 'f': e.preventDefault(); enterHintMode(); break;
+    if (hasPrefix(newSeq)) {
+      e.preventDefault();
+      pendingSeq = newSeq;
+      if (seqTimer) clearTimeout(seqTimer);
+      seqTimer = setTimeout(function () {
+        // Timeout: if exact match exists execute it, otherwise discard
+        if (KEY_MAP[pendingSeq]) commitSeq(pendingSeq);
+        else clearSeq();
+      }, 1000);
+      return;
+    }
+
+    // No match on extended sequence — reset and try with just this key
+    clearSeq();
+    if (KEY_MAP[key]) {
+      e.preventDefault();
+      KEY_MAP[key]();
+      return;
+    }
+    if (hasPrefix(key)) {
+      e.preventDefault();
+      pendingSeq = key;
+      seqTimer = setTimeout(function () {
+        if (KEY_MAP[pendingSeq]) commitSeq(pendingSeq);
+        else clearSeq();
+      }, 1000);
     }
   }, true);
 
-})();
+}());

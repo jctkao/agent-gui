@@ -1,37 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { getSetting, setSetting } from "../../lib/settings";
+import {
+  ACTION_DEFINITIONS,
+  Overrides,
+  loadOverrides,
+  resolveBindings,
+  saveOverrides,
+} from "../../lib/keybindings";
+import KeybindingRow from "./KeybindingRow";
 
-type Tab = 'ai' | 'shortcuts';
-
-const SHORTCUTS = [
-  { key: "j / k",  action: "向下 / 向上捲動" },
-  { key: "d / u",  action: "向下 / 向上捲動半頁" },
-  { key: "gg",     action: "捲動到頂部" },
-  { key: "G",      action: "捲動到底部" },
-  { key: "H / L",  action: "歷史上一頁 / 下一頁" },
-  { key: "r",      action: "重新載入" },
-  { key: "f",      action: "Hint 模式（鍵盤點擊連結）" },
-  { key: "Esc",    action: "離開 hint / insert 模式" },
-];
+type Tab = "ai" | "shortcuts";
 
 interface Props {
   onClose: () => void;
 }
 
 export default function SettingsModal({ onClose }: Props) {
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey]       = useState("");
   const [ollamaUrl, setOllamaUrl] = useState("");
   const [ollamaModel, setOllamaModel] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved]         = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("ai");
   const [hoveredTab, setHoveredTab] = useState<Tab | null>(null);
+
+  const [overrides, setOverrides] = useState<Overrides>({});
+  const [confirmRestore, setConfirmRestore] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getSetting("anthropic_api_key").then((v) => { if (v) setApiKey(v); });
-    getSetting("ollama_url").then((v) => { if (v) setOllamaUrl(v); });
-    getSetting("ollama_model").then((v) => { if (v) setOllamaModel(v); });
+    getSetting("ollama_url").then((v)        => { if (v) setOllamaUrl(v); });
+    getSetting("ollama_model").then((v)      => { if (v) setOllamaModel(v); });
     inputRef.current?.focus();
+    loadOverrides().then(setOverrides);
   }, []);
 
   async function handleSave() {
@@ -41,6 +43,37 @@ export default function SettingsModal({ onClose }: Props) {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
+
+  async function handleBindingSave(actionId: string, key: string) {
+    const next = { ...overrides, [actionId]: key };
+    // If new key equals default, remove the override
+    const def = ACTION_DEFINITIONS.find((a) => a.id === actionId);
+    if (def && def.defaultKey === key) {
+      delete next[actionId];
+    }
+    await saveOverrides(next);
+    setOverrides(next);
+  }
+
+  async function handleBindingReset(actionId: string) {
+    const next = { ...overrides };
+    delete next[actionId];
+    await saveOverrides(next);
+    setOverrides(next);
+  }
+
+  async function handleRestoreAll() {
+    if (!confirmRestore) {
+      setConfirmRestore(true);
+      return;
+    }
+    await saveOverrides({});
+    setOverrides({});
+    setConfirmRestore(false);
+  }
+
+  const effectiveMap = resolveBindings(overrides);
+  const browserActions = ACTION_DEFINITIONS.filter((a) => a.context === "browser");
 
   return (
     <div style={overlay}>
@@ -61,7 +94,7 @@ export default function SettingsModal({ onClose }: Props) {
                   ...(activeTab === tab ? tabItemActive : {}),
                   ...(activeTab !== tab && hoveredTab === tab ? tabItemHover : {}),
                 }}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => { setActiveTab(tab); setConfirmRestore(false); }}
                 onMouseEnter={() => setHoveredTab(tab)}
                 onMouseLeave={() => setHoveredTab(null)}
               >
@@ -118,21 +151,51 @@ export default function SettingsModal({ onClose }: Props) {
 
             {activeTab === "shortcuts" && (
               <div style={panel}>
-                <h2 style={panelTitle}>Keyboard Shortcuts</h2>
-                <p style={shortcutNote}>快捷鍵僅適用於瀏覽器面板。</p>
+                <div style={shortcutsHeader}>
+                  <div>
+                    <h2 style={panelTitle}>Keyboard Shortcuts</h2>
+                    <p style={shortcutNote}>
+                      適用於瀏覽器面板。Changes take effect on the next page load.
+                      <br />
+                      <span style={{ color: "var(--accent)", fontWeight: 700 }}>*</span>
+                      {" "}marks customized bindings.
+                    </p>
+                  </div>
+                  <div style={{ paddingTop: 4 }}>
+                    {confirmRestore ? (
+                      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sure?</span>
+                        <button onClick={handleRestoreAll} style={btnDanger}>Yes, reset all</button>
+                        <button onClick={() => setConfirmRestore(false)} style={btnSecondary}>Cancel</button>
+                      </span>
+                    ) : (
+                      <button onClick={handleRestoreAll} style={btnSecondary}>
+                        Restore all defaults
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <table style={table}>
                   <thead>
                     <tr>
-                      <th style={th}>按鍵</th>
-                      <th style={th}>動作</th>
+                      <th style={th}>Action</th>
+                      <th style={th}>Key</th>
+                      <th style={th}></th>
+                      <th style={th}></th>
+                      <th style={th}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {SHORTCUTS.map(({ key, action }) => (
-                      <tr key={key}>
-                        <td style={tdKey}><code style={kbd}>{key}</code></td>
-                        <td style={tdAction}>{action}</td>
-                      </tr>
+                    {browserActions.map((action) => (
+                      <KeybindingRow
+                        key={action.id}
+                        action={action}
+                        effectiveKey={effectiveMap[action.id]}
+                        isOverride={action.id in overrides}
+                        effectiveMap={effectiveMap}
+                        onSave={handleBindingSave}
+                        onReset={handleBindingReset}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -205,8 +268,7 @@ const panel: React.CSSProperties = {
   padding: "24px 28px",
 };
 const panelTitle: React.CSSProperties = {
-  fontSize: 17, fontWeight: 700, margin: "0 0 20px",
-  borderBottom: "2px dashed var(--border-dash)", paddingBottom: 12,
+  fontSize: 17, fontWeight: 700, margin: "0 0 8px",
 };
 const panelFooter: React.CSSProperties = {
   marginTop: "auto", paddingTop: 16,
@@ -234,7 +296,11 @@ const btnPrimary: React.CSSProperties = {
 };
 const shortcutNote: React.CSSProperties = {
   fontSize: 13, color: "var(--text-muted)", fontStyle: "italic",
-  margin: "0 0 16px",
+  margin: "0 0 16px", lineHeight: 1.6,
+};
+const shortcutsHeader: React.CSSProperties = {
+  display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+  borderBottom: "2px dashed var(--border-dash)", paddingBottom: 12, marginBottom: 12,
 };
 const table: React.CSSProperties = {
   width: "100%", borderCollapse: "collapse",
@@ -244,18 +310,14 @@ const th: React.CSSProperties = {
   borderBottom: "2px dashed var(--border-dash)",
   fontWeight: 700, fontSize: 13, color: "var(--text-muted)",
 };
-const tdKey: React.CSSProperties = {
-  padding: "8px 12px",
-  borderBottom: "1px dashed var(--border-dash)",
-  width: 140,
+const btnSecondary: React.CSSProperties = {
+  background: "none", border: "1px solid var(--border-dash)",
+  borderRadius: 6, padding: "4px 12px", cursor: "pointer",
+  fontSize: 12, fontFamily: "inherit", color: "var(--text-muted)",
 };
-const tdAction: React.CSSProperties = {
-  padding: "8px 12px",
-  borderBottom: "1px dashed var(--border-dash)",
-};
-const kbd: React.CSSProperties = {
-  fontFamily: "'Space Mono', monospace", fontSize: 13,
-  background: "var(--bg-tab-inactive)",
-  border: "1px solid var(--border-dash)",
-  borderRadius: 4, padding: "1px 6px",
+const btnDanger: React.CSSProperties = {
+  background: "#c00", color: "#fff",
+  border: "none", borderRadius: 6,
+  padding: "4px 12px", cursor: "pointer",
+  fontSize: 12, fontFamily: "inherit",
 };

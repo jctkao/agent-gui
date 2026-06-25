@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
+import { loadOverrides } from "../../../lib/keybindings";
 
 interface Props {
   url?: string;
@@ -25,9 +26,14 @@ export default function BrowserPane({ url = "https://react.dev" }: Props) {
     const el = overlayRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    invoke("browser_open", {
-      url: currentUrl, x: r.left, y: r.top, w: r.width, h: r.height,
-    }).catch((e) => setError(String(e)));
+    loadOverrides()
+      .then((overrides) => invoke("sync_keybindings", { overrides }))
+      .catch(() => {})
+      .finally(() => {
+        invoke("browser_open", {
+          url: currentUrl, x: r.left, y: r.top, w: r.width, h: r.height,
+        }).catch((e) => setError(String(e)));
+      });
 
     // ResizeObserver keeps rect in sync
     const ro = new ResizeObserver(() => {
