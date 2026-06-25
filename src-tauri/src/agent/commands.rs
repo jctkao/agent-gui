@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 
 use rig::client::CompletionClient;
-use rig::completion::Chat;
+use rig::completion::Prompt;
+use rig::memory::InMemoryConversationMemory;
 use rig::providers::ollama;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -25,11 +26,7 @@ pub async fn agent_start(
 }
 
 async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, model: String) {
-    let mut history = {
-        let state = app.state::<Mutex<AgentState>>();
-        let h = state.lock().unwrap().chat_history.clone();
-        h
-    };
+    let memory = app.state::<InMemoryConversationMemory>().inner().clone();
 
     let client = match ollama::Client::builder().api_key("").base_url(&ollama_url).build() {
         Ok(c) => c,
@@ -54,16 +51,13 @@ async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, mod
     let agent = client
         .agent(&model)
         .preamble(&system_prompt)
+        .memory(memory)
         .tool(LoadSkillTool { app: app.clone() })
         .tool(TerminalTool { app: app.clone() })
         .build();
 
-    match agent.chat(user_message, &mut history).await {
+    match agent.prompt(user_message).conversation("main").await {
         Ok(response) => {
-            {
-                let state = app.state::<Mutex<AgentState>>();
-                state.lock().unwrap().chat_history = history;
-            }
             app.emit("agent-message", &response).ok();
             app.emit("agent-done", ()).ok();
         }

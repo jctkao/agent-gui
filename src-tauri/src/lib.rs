@@ -5,6 +5,7 @@ mod pty;
 use agent::commands::{agent_start, agent_terminal_result};
 use agent::skills::SkillManager;
 use agent::state::AgentState;
+use rig::memory::InMemoryConversationMemory;
 use commands::browser::{
     browser_back, browser_forward, browser_hide, browser_open, browser_reload,
     browser_set_rect, browser_show, BrowserOverlayState,
@@ -39,6 +40,7 @@ pub fn run() {
         .manage(Mutex::new(BrowserOverlayState { last_rect: None }))
         .manage(PtyManager::default())
         .manage(Mutex::new(AgentState::default()))
+        .manage(InMemoryConversationMemory::new())
         .manage(skill_manager)
         .setup(|app| {
             // Create the browser overlay webview once, at startup, off-screen.
