@@ -5,7 +5,7 @@ import { getSetting } from "../../lib/settings";
 import { getTerminal } from "../../lib/terminalRegistry";
 import { useWorkspaceStore, Pane } from "../../store/workspace";
 
-type Role = "user" | "assistant" | "tool-ran" | "terminal-waiting";
+type Role = "user" | "assistant" | "tool-ran" | "terminal-waiting" | "browser-action";
 
 interface Message {
   id: string;
@@ -125,6 +125,15 @@ export default function ChatPanel() {
     );
 
     unlisteners.push(
+      listen<{ summary: string }>("agent-browser-action", (ev) => {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: "browser-action", content: ev.payload.summary },
+        ]);
+      })
+    );
+
+    unlisteners.push(
       listen("agent-done", () => {
         const waitingId = pendingWaitingId.current;
         if (waitingId) {
@@ -132,10 +141,8 @@ export default function ChatPanel() {
           setMessages((prev) => prev.filter((m) => m.id !== waitingId));
         }
         setSending(false);
-        if (focusInputOnDoneRef.current) {
-          focusInputOnDoneRef.current = false;
-          setTimeout(() => document.getElementById("chat-input")?.focus(), 0);
-        }
+        focusInputOnDoneRef.current = false;
+        setTimeout(() => document.getElementById("chat-input")?.focus(), 0);
       })
     );
 
@@ -339,6 +346,13 @@ export default function ChatPanel() {
               </div>
             );
           }
+          if (msg.role === "browser-action") {
+            return (
+              <div key={msg.id} style={assistantBubbleWrap}>
+                <div style={browserActionBadge}>[Browser] {msg.content}</div>
+              </div>
+            );
+          }
           if (msg.role === "terminal-waiting") {
             return (
               <div key={msg.id} style={assistantBubbleWrap}>
@@ -493,4 +507,11 @@ const sendBtn: React.CSSProperties = {
   width: 42, height: 42, flexShrink: 0,
   border: "2px solid var(--accent)", background: "var(--accent)",
   borderRadius: 10, cursor: "pointer", color: "#fff", fontSize: 18,
+};
+const browserActionBadge: React.CSSProperties = {
+  fontSize: 12, color: "var(--text-muted)",
+  fontFamily: "'Space Mono', monospace",
+  padding: "3px 8px",
+  border: "1px dashed var(--border-dash)",
+  borderRadius: 6, display: "inline-block",
 };

@@ -8,6 +8,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::skills::SkillManager;
 use super::state::{AgentState, TerminalResult};
+use super::tools::browser::{
+    BrowserClickTool, BrowserFillTool, BrowserGetElementsTool, BrowserGetPageInfoTool,
+    BrowserGetPageTextTool, BrowserGetSectionTextTool, BrowserGetSectionsTool, BrowserSelectTool,
+};
 use super::tools::skill_loader::LoadSkillTool;
 use super::tools::terminal::TerminalTool;
 
@@ -51,9 +55,19 @@ async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, mod
     let agent = client
         .agent(&model)
         .preamble(&system_prompt)
+        .additional_params(serde_json::json!({ "num_ctx": 8192 }))
+        .default_max_turns(10)
         .memory(memory)
         .tool(LoadSkillTool { app: app.clone() })
         .tool(TerminalTool { app: app.clone() })
+        .tool(BrowserGetPageInfoTool { app: app.clone() })
+        .tool(BrowserGetPageTextTool { app: app.clone() })
+        .tool(BrowserGetSectionsTool { app: app.clone() })
+        .tool(BrowserGetSectionTextTool { app: app.clone() })
+        .tool(BrowserGetElementsTool { app: app.clone() })
+        .tool(BrowserClickTool { app: app.clone() })
+        .tool(BrowserFillTool { app: app.clone() })
+        .tool(BrowserSelectTool { app: app.clone() })
         .build();
 
     match agent.prompt(user_message).conversation("main").await {

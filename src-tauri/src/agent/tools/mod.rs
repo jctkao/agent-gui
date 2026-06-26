@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod skill_loader;
 pub mod terminal;
 

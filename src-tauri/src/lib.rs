@@ -67,6 +67,7 @@ pub fn run() {
                                 let overrides = kb.0.lock().unwrap_or_else(|e| e.into_inner());
                                 wv.eval(&bindings_js(&overrides)).ok();
                                 drop(overrides);
+                                wv.eval(include_str!("readability.js")).ok();
                                 wv.eval(include_str!("vimium.js")).ok();
                                 // Inject SPA navigation monitoring.
                                 // Uses window.__TAURI__ if available; logs availability for debugging.
