@@ -46,6 +46,28 @@ function looksLikePrompt(line: string): boolean {
   return PROMPT_CHARS.some((c) => t.endsWith(c));
 }
 
+function waitForInitialPrompt(ptyId: string, timeout = 10000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let unlisten: (() => void) | null = null;
+    let accum = "";
+    const timer = setTimeout(() => {
+      unlisten?.();
+      reject(new Error("Timed out waiting for terminal prompt"));
+    }, timeout);
+
+    listen<number[]>(`pty-data-${ptyId}`, (ev) => {
+      accum += new TextDecoder().decode(new Uint8Array(ev.payload));
+      const stripped = stripAnsi(accum);
+      const lines = stripped.split("\n");
+      if (lines.some(looksLikePrompt)) {
+        clearTimeout(timer);
+        unlisten?.();
+        resolve();
+      }
+    }).then((fn) => { unlisten = fn; });
+  });
+}
+
 function waitForPtyId(tabId: string, timeout = 5000): Promise<string | null> {
   return new Promise((resolve) => {
     const existing = useWorkspaceStore.getState().tabs.find((t) => t.id === tabId);
@@ -172,6 +194,13 @@ export default function ChatPanel() {
       store.addTab(newPane);
       targetTabId = newPane.id;
       ptyId = await waitForPtyId(targetTabId);
+      if (ptyId) {
+        try {
+          await waitForInitialPrompt(ptyId);
+        } catch {
+          ptyId = null;
+        }
+      }
     }
 
     if (!ptyId) {
