@@ -159,6 +159,12 @@ export default function ChatPanel() {
 
     pendingPtyId.current = ptyId;
 
+    store.setActiveTab(targetTabId);
+    setTimeout(() => {
+      invoke("main_focus").catch(console.error);
+      getTerminal(targetTabId)?.focus();
+    }, 80);
+
     // Snapshot prompt for boundary detection
     const promptSnapshot = snapshotPrompt(targetTabId);
     function isPromptLine(line: string): boolean {
