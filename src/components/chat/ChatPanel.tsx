@@ -38,7 +38,13 @@ function snapshotPrompt(tabId: string): string {
   return "";
 }
 
-const PS_PROMPT_RE = /^PS .*>\s*$/;
+const PROMPT_CHARS = ["$", "#", ">", "%", "❯"];
+
+function looksLikePrompt(line: string): boolean {
+  const t = line.trimEnd();
+  if (t.length === 0 || t.length > 120) return false;
+  return PROMPT_CHARS.some((c) => t.endsWith(c));
+}
 
 function waitForPtyId(tabId: string, timeout = 5000): Promise<string | null> {
   return new Promise((resolve) => {
@@ -158,7 +164,7 @@ export default function ChatPanel() {
     function isPromptLine(line: string): boolean {
       const t = line.trimEnd();
       if (promptSnapshot && t.endsWith(promptSnapshot)) return true;
-      return PS_PROMPT_RE.test(t);
+      return looksLikePrompt(line);
     }
 
     // Inject command into PTY without newline
