@@ -1,0 +1,8 @@
+# Host IP mappings
+# Format: hostname = ip
+# One entry per line. Lines starting with # are ignored.
+#
+# Example entries (replace with your real hosts):
+web-server = 192.168.1.10
+db-primary = 10.0.0.5
+db-replica = 10.0.0.6
