@@ -76,17 +76,36 @@ npx tsc --noEmit     # TypeScript 型別檢查
 
 分頁列支援動態新增（`+` 按鈕展開選單）與關閉（`×` 按鈕）。所有分頁關閉後工作區顯示空白。
 
-## AI 助理與 Terminal 整合
+## AI 助理與工作區整合
 
-Chat Panel 連接本機 **Ollama** 模型，支援工具呼叫（tool calling）：
+Chat Panel 連接本機 **Ollama** 模型，支援工具呼叫（tool calling）。AI 可透過兩類工具操作工作區：
+
+### Terminal 工具
 
 1. 使用者輸入任務（例如「列出目前目錄的檔案」）
-2. AI 決定要執行的 terminal 指令，傳送到 Terminal pane 並**暫停等待**
-3. 使用者可選擇確認執行或取消
+2. AI 決定要執行的 terminal 指令，預輸入到 Terminal pane 並**自動切換焦點**到 Terminal
+3. 使用者確認按 Enter 執行，或按取消按鈕中止（焦點自動移到取消按鈕）
 4. Terminal 輸出自動擷取並回傳給 AI，AI 繼續推理
 5. 重複直到任務完成
 
-AI 僅能透過 terminal 執行指令，無法直接存取檔案系統或網路。
+支援偵測 SSH 遠端連線的提示符號，指令完成後會自動回傳結果給 AI。
+
+### Browser 工具（自動執行，不需使用者確認）
+
+AI 可直接操作 Browser pane 中開啟的網頁，支援以下 8 種工具：
+
+| 工具 | 說明 |
+|------|------|
+| `browser_get_page_info` | 取得目前頁面的 URL 與標題 |
+| `browser_get_page_text` | 擷取頁面主要文字內容（最多 4000 字，使用 Mozilla Readability）|
+| `browser_get_sections` | 列出頁面所有內容區塊（標題、段落、表格等），最多 30 筆 |
+| `browser_get_section_text` | 讀取指定區塊的完整文字 |
+| `browser_get_elements` | 列出頁面所有可互動元素（按鈕、輸入框、連結等），最多 50 筆 |
+| `browser_click` | 點擊指定元素 |
+| `browser_fill` | 在輸入框填入文字（相容 React 等框架的合成事件）|
+| `browser_select` | 在下拉選單選擇選項 |
+
+每次 browser 工具呼叫後，Chat Panel 會顯示簡短的動作記錄（例如 `[Browser] Clicked "Submit"`）。
 
 ## App 全域鍵盤快捷鍵
 
@@ -186,7 +205,7 @@ FitAddon: ResizeObserver → fitAddon.fit() → invoke("pty_resize")
 │   │   └── terminalRegistry.ts   # xterm.js 實例 Map（ptyId → Terminal）
 │   └── components/
 │       ├── layout/               # TitleBar、ResizableSplitter
-│       ├── chat/                 # ChatPanel（Ollama 整合 + Terminal 橋接）
+│       ├── chat/                 # ChatPanel（Ollama 整合 + Terminal/Browser 橋接）
 │       ├── settings/             # SettingsModal
 │       └── workspace/            # WorkspacePanel、TabBar、SplitLayout、panes/
 ├── src-tauri/                    # Rust 後端
@@ -194,8 +213,15 @@ FitAddon: ResizeObserver → fitAddon.fit() → invoke("pty_resize")
 │   │   ├── lib.rs                # 插件初始化、state 管理、command 註冊
 │   │   ├── pty.rs                # PTY session 管理（create/write/resize/kill）
 │   │   ├── vimium.js             # Browser 鍵盤快捷鍵腳本（注入 overlay webview）
+│   │   ├── readability.js        # Mozilla Readability（注入 overlay，供 browser 工具使用）
 │   │   ├── commands/browser.rs   # browser_open / set_rect / show / hide
-│   │   └── agent/                # Ollama agent loop + terminal tool 橋接
+│   │   └── agent/                # Ollama agent loop
+│   │       ├── commands.rs       # agent_start、run_loop、agent_terminal_result
+│   │       ├── state.rs          # AgentState（messages、approval_tx）
+│   │       ├── ollama.rs         # call_ollama()（POST /api/chat）
+│   │       └── tools/
+│   │           ├── terminal.rs   # TerminalTool（需使用者確認）
+│   │           └── browser.rs    # 8 個 BrowserXxxTool（自動執行）
 │   ├── tauri.conf.json           # 視窗設定（1280×800、無裝飾）
 │   └── capabilities/             # Tauri 2 權限設定
 └── AI Workbench Wireframes.dc.html  # 設計稿

@@ -139,10 +139,13 @@ TabBar
 - **`commands/browser.rs`** — Tauri commands managing the overlay webview lifecycle via `Mutex<BrowserOverlayState>` (`last_rect: Option<(f64,f64,f64,f64)>`). Also contains `browser_focus` (focuses overlay WebView2 controller) and `main_focus` (focuses main webview controller via `get_webview("main").set_focus()`) — these are distinct from window focus.
 - **`commands/keybindings.rs`** — `KeybindingState` (Mutex over user override map), `bindings_js()` (builds the JS snippet injected before vimium.js — sets both `window.__bindings` for Vimium and `window.__app_bindings` for app-level shortcuts), `sync_keybindings` command (updates state from frontend after user saves settings)
 - **`pty.rs`** — PTY session management: `PtyManager` (`Mutex<HashMap<String, PtySession>>`), commands `pty_create / pty_write / pty_resize / pty_kill`. Each session spawns a background thread that reads PTY master output and emits `pty-data-{id}` Tauri events.
-- **`agent/`** — Ollama-backed agentic loop:
-  - `state.rs` — `AgentState`: conversation `messages` (JSON), optional `system_prompt`, and `approval_tx` (oneshot channel for terminal result handoff)
+- **`agent/`** — Ollama-backed agentic loop (powered by the `rig` crate):
+  - `state.rs` — `AgentState`: conversation history (via `InMemoryConversationMemory`) and `approval_tx` (oneshot channel for terminal result handoff)
   - `ollama.rs` — `call_ollama()`: POST to Ollama `/api/chat` with tool definitions
-  - `commands.rs` — `agent_start`: pushes user message, spawns `run_loop` on tokio; `run_loop` calls Ollama repeatedly, parks on `agent-command-to-terminal` events and resumes when `agent_terminal_result` delivers the output; `agent_terminal_result`: resolves the parked oneshot with terminal output
+  - `commands.rs` — `agent_start`: spawns `run_agent` on tokio; builds the Rig agent with all tools registered; `agent_terminal_result`: resolves the parked oneshot with terminal output
+  - `tools/terminal.rs` — `TerminalTool`: emits `agent-command-to-terminal`, parks on a oneshot channel until `agent_terminal_result` delivers output; requires user confirmation (Enter in terminal)
+  - `tools/browser.rs` — 8 browser tools (`BrowserGetPageInfoTool`, `BrowserGetPageTextTool`, `BrowserGetSectionsTool`, `BrowserGetSectionTextTool`, `BrowserGetElementsTool`, `BrowserClickTool`, `BrowserFillTool`, `BrowserSelectTool`). Each injects JS into the browser overlay via `wv.eval()`, waits for a `browser-tool-result` Tauri event via a oneshot channel, and returns the result. Fully automatic — no user confirmation. After each call, emits `agent-browser-action` for ChatPanel to display inline.
+- **`readability.js`** — Mozilla Readability bundled as a static asset (`include_str!`), injected into the browser overlay on every page load alongside `vimium.js`. Enables `browser_get_page_text` to extract clean article text.
 - SQLite DB (`settings.db`) is initialized on first launch via `tauri-plugin-sql` migrations; the schema is a single `settings (key, value)` key-value table. Keys in use: `anthropic_api_key`, `ollama_url`, `ollama_model`
 
 ### Frontend (`src/`)
@@ -153,6 +156,7 @@ TabBar
 - **`src/store/workspace.ts`** — single Zustand store for all workspace state. `Pane.shell` holds the terminal shell type; ptyId is managed locally inside `TerminalPane` via `useRef`.
 - Inline `React.CSSProperties` objects are used for styling (no CSS modules or Tailwind).
 - **`ChatPanel.tsx` input:** uses a `<textarea>` (not `<input>`) with JS-driven auto-resize (`el.style.height = 'auto'` → `scrollHeight`, clamped to 130 px). `Enter` sends, `Shift+Enter` inserts newline. Session history stored in `historyRef` (array of sent messages); `historyIndexRef` tracks position (-1 = draft mode); `draftRef` preserves in-progress text. `Alt+ArrowUp/Down` navigates history.
+- **`ChatPanel.tsx` agent flow:** listens to `agent-command-to-terminal` (terminal tool — pre-types command in Terminal, auto-focuses terminal, user presses Enter or cancel), `agent-browser-action` (browser tools — appends a compact `browser-action` log entry inline in the chat), `agent-message` / `agent-done` (final reply). When a terminal command arrives, focus auto-switches to the Terminal pane; the cancel button also receives focus so keyboard users can press Space/Enter to cancel.
 
 ### Adding a New Pane Type
 
@@ -178,25 +182,30 @@ TabBar
 ```
 ChatPanel (React)
   ├── sends: invoke("agent_start", { userMessage, ollamaUrl, ollamaModel })
-  │     → Rust spawns run_loop (tokio task)
-  │     → run_loop calls Ollama; on tool_call: parks, emits "agent-command-to-terminal"
+  │     → Rust spawns run_agent (tokio task) with Rig agent builder
+  │     → agent has TerminalTool + 8 BrowserXxxTools registered
   │
-  ├── listens: "agent-command-to-terminal"
+  ├── listens: "agent-command-to-terminal"  [TerminalTool — requires user confirmation]
+  │     → auto-focuses Terminal pane and cancel button
   │     → pre-types command into active Terminal PTY (without Enter)
   │     → listens to pty-data-{ptyId} to capture output after user confirms (Enter)
   │     → invoke("agent_terminal_result", { command, output, cancelled })
-  │     → unblocks run_loop, which continues with tool result
+  │     → unblocks TerminalTool oneshot, Rig continues with tool result
+  │
+  ├── listens: "agent-browser-action"  [BrowserXxxTools — fully automatic]
+  │     → appends a compact inline log entry (e.g. "[Browser] Clicked 'Submit'")
+  │     → no user interaction required; tool result already returned to Rig
   │
   └── listens: "agent-message" / "agent-done"
         → displays assistant reply, re-enables input
 ```
 
-The user always sees the command before it runs — they press Enter in the terminal to confirm, or `Ctrl+C` to cancel. There is no auto-execution.
+Terminal tool: the user always sees the command before it runs — they press Enter to confirm or click cancel. There is no auto-execution.
+
+Browser tools: fully automatic. The agent reads the page and interacts with elements without asking for confirmation. Actions are shown inline in the chat for transparency.
 
 ## OpenSpec Changes
 
 Planning artifacts live in `openspec/changes/`. Completed changes are archived under `openspec/changes/archive/`. Main capability specs are in `openspec/specs/`.
 
-Active changes:
-- `browser-vimium-mode` — implementation complete, pending manual verification. Use `/opsx:archive browser-vimium-mode` when verified.
-- `multiline-chat-input` — implementation complete. Use `/opsx:archive multiline-chat-input` when verified.
+Active changes: none.
