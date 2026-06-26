@@ -1,9 +1,4 @@
-# terminal-auto-focus Specification
-
-## Purpose
-Define the behavior for automatically focusing the terminal tab when the agent sends a command, so the user can immediately interact with the terminal without manual tab switching.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Terminal tab auto-focus on agent command
 When the agent sends a command to the terminal, the UI SHALL automatically switch the active workspace tab to the target terminal tab. If the chat panel does NOT have keyboard focus at the moment the event fires, the xterm instance SHALL also receive focus so the user can immediately press Enter. If the chat panel DOES have keyboard focus, the xterm instance SHALL NOT receive focus; instead the cancel button in the terminal-waiting widget SHALL receive focus so the user can press Space to cancel.

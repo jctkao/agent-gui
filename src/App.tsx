@@ -63,7 +63,14 @@ export default function App() {
       case "focus_chat": {
         e?.preventDefault();
         invoke("main_focus")
-          .then(() => document.getElementById("chat-input")?.focus())
+          .then(() => {
+            const cancelBtn = document.getElementById("active-cancel-btn");
+            if (cancelBtn) {
+              (cancelBtn as HTMLElement).focus();
+            } else {
+              document.getElementById("chat-input")?.focus();
+            }
+          })
           .catch(console.error);
         break;
       }

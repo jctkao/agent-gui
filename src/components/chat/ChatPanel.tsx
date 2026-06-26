@@ -65,6 +65,8 @@ export default function ChatPanel() {
   const pendingWaitingId = useRef<string | null>(null);
   const pendingUnlisten = useRef<(() => void) | null>(null);
   const pendingPtyId = useRef<string | null>(null);
+  const shouldFocusCancelRef = useRef(false);
+  const focusInputOnDoneRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,12 +89,13 @@ export default function ChatPanel() {
       listen<string>("agent-command-to-terminal", (ev) => {
         const suggestedCommand = ev.payload;
         const id = nextId();
+        shouldFocusCancelRef.current = document.activeElement?.id === "chat-input";
         pendingWaitingId.current = id;
         setMessages((prev) => [
           ...prev,
           { id, role: "terminal-waiting", content: "", command: suggestedCommand },
         ]);
-        handleInjectToTerminal(suggestedCommand, id);
+        handleInjectToTerminal(suggestedCommand, id, shouldFocusCancelRef.current);
       })
     );
 
@@ -118,6 +121,10 @@ export default function ChatPanel() {
           setMessages((prev) => prev.filter((m) => m.id !== waitingId));
         }
         setSending(false);
+        if (focusInputOnDoneRef.current) {
+          focusInputOnDoneRef.current = false;
+          setTimeout(() => document.getElementById("chat-input")?.focus(), 0);
+        }
       })
     );
 
@@ -127,7 +134,7 @@ export default function ChatPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleInjectToTerminal(suggestedCommand: string, waitingMsgId: string) {
+  async function handleInjectToTerminal(suggestedCommand: string, waitingMsgId: string, chatHasFocus = false) {
     const store = useWorkspaceStore.getState();
     const activeTab = store.tabs.find((t) => t.id === store.activeTabId);
 
@@ -162,7 +169,7 @@ export default function ChatPanel() {
     store.setActiveTab(targetTabId);
     setTimeout(() => {
       invoke("main_focus").catch(console.error);
-      getTerminal(targetTabId)?.focus();
+      if (!chatHasFocus) getTerminal(targetTabId)?.focus();
     }, 80);
 
     // Snapshot prompt for boundary detection
@@ -248,6 +255,7 @@ export default function ChatPanel() {
       await invoke("pty_write", { id: ptyId, data: [0x03] }).catch(console.error);
     }
     pendingWaitingId.current = null;
+    focusInputOnDoneRef.current = true;
     setMessages((prev) => prev.filter((m) => m.id !== waitingMsgId));
     await invoke("agent_terminal_result", { command: "", output: "", cancelled: true }).catch(console.error);
   }
@@ -283,7 +291,15 @@ export default function ChatPanel() {
         <span style={{ fontSize: 17, fontWeight: 700 }}>AI 助理</span>
       </div>
 
-      <div style={messagesStyle}>
+      <div
+        style={messagesStyle}
+        onClick={(e) => {
+          const cancelBtn = document.getElementById("active-cancel-btn");
+          if (cancelBtn && !(e.target as Element).closest("button, input, a")) {
+            cancelBtn.focus();
+          }
+        }}
+      >
         {messages.map((msg) => {
           if (msg.role === "user") {
             return (
@@ -316,7 +332,17 @@ export default function ChatPanel() {
                   <div style={waitingLabel}>在 terminal 中等待執行…</div>
                   <div style={waitingCmd} className="selectable">{msg.command}</div>
                   <div style={waitingButtons}>
-                    <button onClick={() => handleCancel(msg.id)} style={btnCancel}>取消</button>
+                    <button
+                      id="active-cancel-btn"
+                      ref={(el) => {
+                        if (el && shouldFocusCancelRef.current) {
+                          el.focus();
+                          shouldFocusCancelRef.current = false;
+                        }
+                      }}
+                      onClick={() => handleCancel(msg.id)}
+                      style={btnCancel}
+                    >取消</button>
                   </div>
                 </div>
               </div>
