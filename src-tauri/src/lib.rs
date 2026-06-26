@@ -8,7 +8,7 @@ use agent::state::AgentState;
 use rig::memory::InMemoryConversationMemory;
 use commands::browser::{
     browser_back, browser_focus, browser_forward, browser_hide, browser_open, browser_reload,
-    browser_set_rect, browser_show, BrowserOverlayState,
+    browser_set_rect, browser_show, main_focus, BrowserOverlayState,
 };
 use commands::keybindings::{bindings_js, sync_keybindings, KeybindingState};
 use pty::{pty_create, pty_kill, pty_resize, pty_write, PtyManager};
@@ -106,6 +106,7 @@ pub fn run() {
             browser_forward,
             browser_reload,
             browser_focus,
+            main_focus,
             pty_create,
             pty_write,
             pty_resize,

@@ -117,8 +117,8 @@ const bar: React.CSSProperties = {
 
 const baseWrap: React.CSSProperties = {
   display: "flex", alignItems: "center",
-  border: "2px solid",
-  borderBottom: "none",
+  borderWidth: "2px 2px 0",
+  borderStyle: "solid",
   borderRadius: "9px 9px 0 0",
 };
 const activeTabWrap: React.CSSProperties = {
@@ -129,8 +129,8 @@ const activeTabWrap: React.CSSProperties = {
 };
 const inactiveTabWrap: React.CSSProperties = {
   ...baseWrap,
-  borderColor: "var(--border-dash)",
   borderStyle: "dashed",
+  borderColor: "var(--border-dash)",
   background: "var(--bg-tab-inactive)",
 };
 
