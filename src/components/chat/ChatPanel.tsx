@@ -68,10 +68,21 @@ export default function ChatPanel() {
   const shouldFocusCancelRef = useRef(false);
   const focusInputOnDoneRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const draftRef = useRef("");
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 130) + "px";
+  }, [input]);
 
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [];
@@ -263,7 +274,10 @@ export default function ChatPanel() {
   async function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+    historyRef.current.push(text);
+    historyIndexRef.current = -1;
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     setSending(true);
 
     setMessages((prev) => [...prev, { id: nextId(), role: "user", content: text }]);
@@ -354,11 +368,47 @@ export default function ChatPanel() {
       </div>
 
       <div style={inputRow}>
-        <input
+        <textarea
           id="chat-input"
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+          rows={1}
+          onChange={(e) => {
+            setInput(e.target.value);
+            const el = e.target;
+            el.style.height = "auto";
+            el.style.height = Math.min(el.scrollHeight, 130) + "px";
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            } else if (e.key === "ArrowUp" && e.altKey) {
+              e.preventDefault();
+              const history = historyRef.current;
+              if (history.length === 0) return;
+              const idx = historyIndexRef.current;
+              if (idx === -1) {
+                draftRef.current = input;
+                historyIndexRef.current = history.length - 1;
+              } else if (idx > 0) {
+                historyIndexRef.current = idx - 1;
+              }
+              setInput(history[historyIndexRef.current]);
+            } else if (e.key === "ArrowDown" && e.altKey) {
+              e.preventDefault();
+              const idx = historyIndexRef.current;
+              if (idx === -1) return;
+              const history = historyRef.current;
+              if (idx < history.length - 1) {
+                historyIndexRef.current = idx + 1;
+                setInput(history[historyIndexRef.current]);
+              } else {
+                historyIndexRef.current = -1;
+                setInput(draftRef.current);
+              }
+            }
+          }}
           placeholder={sending ? "等待回應…" : "傳訊息給 AI 助理…"}
           disabled={sending}
           className="selectable"
@@ -430,12 +480,14 @@ const btnCancel: React.CSSProperties = {
 const inputRow: React.CSSProperties = {
   flexShrink: 0, padding: "14px 16px",
   borderTop: "2px dashed var(--border-dash)",
-  display: "flex", gap: 8, alignItems: "center",
+  display: "flex", gap: 8, alignItems: "flex-end",
 };
 const inputBox: React.CSSProperties = {
-  flex: 1, height: 42, border: "2px solid var(--border-dash)",
-  borderRadius: 10, padding: "0 12px", fontSize: 15,
+  flex: 1, minHeight: 42, maxHeight: 130,
+  border: "2px solid var(--border-dash)",
+  borderRadius: 10, padding: "10px 12px", fontSize: 15,
   fontFamily: "inherit", background: "#faf9f6", color: "var(--text)",
+  resize: "none", overflowY: "auto", lineHeight: 1.5,
 };
 const sendBtn: React.CSSProperties = {
   width: 42, height: 42, flexShrink: 0,

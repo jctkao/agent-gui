@@ -152,6 +152,7 @@ TabBar
 - **`src/lib/terminalRegistry.ts`** — module-level `Map<string, Terminal>` for xterm.js instances. Use `createTerminal(id)` / `getTerminal(id)` / `destroyTerminal(id)`. Never put Terminal objects in Zustand.
 - **`src/store/workspace.ts`** — single Zustand store for all workspace state. `Pane.shell` holds the terminal shell type; ptyId is managed locally inside `TerminalPane` via `useRef`.
 - Inline `React.CSSProperties` objects are used for styling (no CSS modules or Tailwind).
+- **`ChatPanel.tsx` input:** uses a `<textarea>` (not `<input>`) with JS-driven auto-resize (`el.style.height = 'auto'` → `scrollHeight`, clamped to 130 px). `Enter` sends, `Shift+Enter` inserts newline. Session history stored in `historyRef` (array of sent messages); `historyIndexRef` tracks position (-1 = draft mode); `draftRef` preserves in-progress text. `Alt+ArrowUp/Down` navigates history.
 
 ### Adding a New Pane Type
 
@@ -196,4 +197,6 @@ The user always sees the command before it runs — they press Enter in the term
 
 Planning artifacts live in `openspec/changes/`. Completed changes are archived under `openspec/changes/archive/`. Main capability specs are in `openspec/specs/`.
 
-Active change: `browser-vimium-mode` (implementation complete, pending manual verification). Use `/opsx:archive browser-vimium-mode` when verified.
+Active changes:
+- `browser-vimium-mode` — implementation complete, pending manual verification. Use `/opsx:archive browser-vimium-mode` when verified.
+- `multiline-chat-input` — implementation complete. Use `/opsx:archive multiline-chat-input` when verified.
