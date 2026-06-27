@@ -172,3 +172,5 @@ const root: React.CSSProperties = {
   background: "var(--bg)",
   overflow: "hidden",
 };
+
+(window as any).__workspaceStore = useWorkspaceStore;

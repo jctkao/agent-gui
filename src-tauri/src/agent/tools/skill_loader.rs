@@ -42,9 +42,10 @@ impl Tool for LoadSkillTool {
     }
 
     async fn call(&self, args: LoadSkillArgs) -> Result<String, ToolError> {
+        tracing::debug!(target: "ai_workbench_lib", skill = %args.name, "load-skill called");
         let skill_manager = self.app.state::<SkillManager>();
-        skill_manager
-            .load_skill_body(&args.name)
-            .map_err(ToolError)
+        let result = skill_manager.load_skill_body(&args.name).map_err(ToolError);
+        tracing::debug!(target: "ai_workbench_lib", skill = %args.name, ok = result.is_ok(), "load-skill done");
+        result
     }
 }

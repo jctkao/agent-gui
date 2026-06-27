@@ -19,6 +19,16 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Surface rig's request/response tracing in the `tauri dev` terminal so the
+    // raw Ollama completion (which rig logs at TRACE) is visible for debugging.
+    // Override with RUST_LOG, e.g. RUST_LOG=rig=trace,ai_workbench_lib=debug.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "rig=trace,ai_workbench_lib=debug".into()),
+        )
+        .init();
+
     let migrations = vec![Migration {
         version: 1,
         description: "create_settings_table",

@@ -30,6 +30,7 @@ pub async fn agent_start(
 }
 
 async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, model: String) {
+    tracing::debug!(target: "ai_workbench_lib", model = %model, url = %ollama_url, msg = %user_message, "run_agent start");
     let memory = app.state::<InMemoryConversationMemory>().inner().clone();
 
     let client = match ollama::Client::builder().api_key("").base_url(&ollama_url).build() {
@@ -55,7 +56,7 @@ async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, mod
     let agent = client
         .agent(&model)
         .preamble(&system_prompt)
-        .additional_params(serde_json::json!({ "num_ctx": 8192 }))
+        .additional_params(serde_json::json!({ "num_ctx": 8192, "think": true }))
         .default_max_turns(10)
         .memory(memory)
         .tool(LoadSkillTool { app: app.clone() })
@@ -72,10 +73,12 @@ async fn run_agent(app: AppHandle, user_message: String, ollama_url: String, mod
 
     match agent.prompt(user_message).conversation("main").await {
         Ok(response) => {
+            tracing::debug!(target: "ai_workbench_lib", chars = response.len(), "run_agent ok");
             app.emit("agent-message", &response).ok();
             app.emit("agent-done", ()).ok();
         }
         Err(e) => {
+            tracing::error!(target: "ai_workbench_lib", error = ?e, "run_agent error");
             app.emit("agent-message", format!("Agent error: {e}")).ok();
             app.emit("agent-done", ()).ok();
         }

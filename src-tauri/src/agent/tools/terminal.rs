@@ -44,6 +44,7 @@ impl Tool for TerminalTool {
     }
 
     async fn call(&self, args: TerminalArgs) -> Result<String, ToolError> {
+        tracing::debug!(target: "ai_workbench_lib", command = %args.command, "run_terminal_command: emitting to terminal, awaiting approval");
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         {
@@ -56,6 +57,7 @@ impl Tool for TerminalTool {
             .map_err(|e| ToolError(e.to_string()))?;
 
         let result = rx.await.map_err(|_| ToolError("Terminal channel closed".to_string()))?;
+        tracing::debug!(target: "ai_workbench_lib", cancelled = result.cancelled, output_chars = result.output.len(), "run_terminal_command: received result");
 
         if result.cancelled {
             return Err(ToolError("User cancelled the command".to_string()));
