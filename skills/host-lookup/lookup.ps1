@@ -26,7 +26,7 @@ $words = $HostName -split '\s+' | Where-Object { $_ -ne '' }
 
 if ($words.Count -le 1) {
     # Single-word: existing substring match
-    $matches = $entries | Where-Object { $_.Name -like "*$HostName*" }
+    $matches = @($entries | Where-Object { $_.Name -like "*$HostName*" })
 
     if ($matches.Count -eq 0) {
         Write-Output "No host matching '$HostName' found in hosts.txt"
