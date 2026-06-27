@@ -133,20 +133,6 @@ export default function ChatPanel() {
     );
 
     unlisteners.push(
-      listen<{ command: string; output: string }>("agent-tool-ran", (ev) => {
-        const waitingId = pendingWaitingId.current;
-        pendingWaitingId.current = null;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === waitingId
-              ? { ...m, role: "tool-ran" as Role, content: ev.payload.output, command: ev.payload.command }
-              : m
-          )
-        );
-      })
-    );
-
-    unlisteners.push(
       listen<{ summary: string }>("agent-browser-action", (ev) => {
         setMessages((prev) => [
           ...prev,
@@ -247,6 +233,20 @@ export default function ChatPanel() {
       if (resultSent) return;
       resultSent = true;
       cleanup();
+      if (pendingWaitingId.current === waitingMsgId) {
+        pendingWaitingId.current = null;
+      }
+      if (cancelled) {
+        setMessages((prev) => prev.filter((m) => m.id !== waitingMsgId));
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === waitingMsgId
+              ? { ...m, role: "tool-ran" as Role, content: output, command }
+              : m
+          )
+        );
+      }
       invoke("agent_terminal_result", { command, output, cancelled }).catch(console.error);
     }
 
